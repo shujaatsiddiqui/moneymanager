@@ -60,8 +60,15 @@ def category_picker(cats, key, optional=True):
 
 
 page = st.sidebar.radio("Money Manager", ["Dashboard", "Add transaction", "Transactions",
-                                          "Budgets", "Rules", "Accounts"])
+                                          "Budgets", "Import", "Rules", "Accounts"],
+                        index=st.session_state.get("nav_index", 0))
 month = st.sidebar.selectbox("Month", month_options())
+
+# Handle category filter from Dashboard click
+if "filter_category_id" not in st.session_state:
+    st.session_state.filter_category_id = None
+if "filter_category_name" not in st.session_state:
+    st.session_state.filter_category_name = None
 cats = call("get", "/categories") or []
 acc_data = call("get", "/accounts") or {"accounts": []}
 accounts = acc_data["accounts"]
@@ -80,8 +87,20 @@ if page == "Dashboard":
             st.info("No budgets for this month yet. Set them on the Budgets page.")
         for r in s["rows"]:
             pct = (r["spent"] / r["limit"]) if r["limit"] else 1.0
-            left = f"{money(r['left'])} left" if r["left"] >= 0 else f"⚠️ {money(-r['left'])} over"
-            st.write(f"**{r['emoji']} {r['category']}**  ·  {money(r['spent'])} of {money(r['limit'])}  ·  {left}")
+            left_text = f"{money(r['left'])} left" if r["left"] >= 0 else f"⚠️ {money(-r['left'])} over"
+            cat_label = f"{r['emoji']} {r['category']}".strip()
+            spent = money(r['spent'])
+            limit = money(r['limit'])
+            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+            # Make category clickable - redirect to Transactions page with filter
+            if col1.button(f"**{cat_label}**", key=f"cat_{r['category_id']}", use_container_width=True):
+                st.session_state.filter_category_id = r["category_id"]
+                st.session_state.filter_category_name = r["category"]
+                st.session_state.nav_index = 2  # Transactions page index
+                st.rerun()
+            col2.write(spent)
+            col3.write(f"of {limit}")
+            col4.write(left_text)
             st.progress(min(max(pct, 0.0), 1.0))
         st.divider()
         d1, d2, d3 = st.columns(3)
@@ -117,9 +136,27 @@ elif page == "Add transaction":
 
 # --------------------------------------------------------------- Transactions
 elif page == "Transactions":
-    st.title(f"Transactions · {month}")
+    # Check if we have a category filter from Dashboard
+    filter_cat_id = st.session_state.get("filter_category_id")
+    filter_cat_name = st.session_state.get("filter_category_name")
+
+    if filter_cat_name:
+        st.title(f"Transactions · {month} · {filter_cat_name}")
+        if st.button("← Clear filter"):
+            st.session_state.filter_category_id = None
+            st.session_state.filter_category_name = None
+            st.rerun()
+    else:
+        st.title(f"Transactions · {month}")
+
     only_unc = st.checkbox("Only uncategorized expenses")
-    txs = call("get", "/transactions", params={"month": month, "uncategorized": only_unc}) or []
+
+    # Build query params
+    params = {"month": month, "uncategorized": only_unc}
+    if filter_cat_id:
+        params["category_id"] = filter_cat_id
+
+    txs = call("get", "/transactions", params=params) or []
     if txs:
         df = pd.DataFrame(txs)[["id", "date", "kind", "amount", "account", "to_account", "category", "merchant", "note"]]
         st.dataframe(df, width="stretch", hide_index=True)
@@ -167,6 +204,79 @@ elif page == "Budgets":
         if r:
             st.success(f"Copied {r['copied']} budgets")
             st.rerun()
+
+# ---------------------------------------------------------------------- Import
+elif page == "Import":
+    st.title("Import Bank Statements")
+    st.caption("Upload CSV files from Chase or Bank of America to import transactions automatically.")
+
+    # Check AI availability
+    ai_available = False
+    try:
+        ai_resp = requests.get(f"{API}/import/ai-status", timeout=5)
+        if ai_resp.status_code == 200:
+            ai_status = ai_resp.json()
+            ai_available = ai_status.get("available", False)
+    except Exception:
+        pass
+
+    uploaded_file = st.file_uploader("Choose a CSV or Excel file", type=["csv", "xlsx", "xls"])
+    account = st.selectbox("Import to account", list(acc_by_name))
+
+    # AI categorization option
+    if ai_available:
+        use_ai = st.checkbox("Use AI to auto-categorize (Ollama)", value=True,
+                             help="Uses local Ollama AI to intelligently categorize transactions")
+    else:
+        use_ai = False
+        st.info("💡 Install Ollama for AI-powered categorization: `brew install ollama && ollama pull llama3.2`")
+
+    if uploaded_file is not None:
+        # Preview the file
+        file_content = uploaded_file.getvalue()
+        filename = uploaded_file.name
+
+        try:
+            preview_resp = requests.post(
+                f"{API}/import/preview",
+                files={"file": (filename, file_content)},
+                timeout=30
+            )
+            if preview_resp.status_code == 200:
+                preview = preview_resp.json()
+                st.success(f"Detected format: **{preview['format']}** — {preview['count']} transactions found")
+
+                if preview["transactions"]:
+                    st.subheader("Preview (first 50)")
+                    df = pd.DataFrame(preview["transactions"])
+                    st.dataframe(df, hide_index=True, use_container_width=True)
+
+                if st.button("Import Transactions", type="primary"):
+                    with st.spinner("Importing..." + (" (AI categorizing)" if use_ai else "")):
+                        uploaded_file.seek(0)
+                        import_resp = requests.post(
+                            f"{API}/import",
+                            files={"file": (filename, uploaded_file.getvalue())},
+                            data={"account_id": acc_by_name[account], "use_ai": use_ai},
+                            timeout=300  # Longer timeout for AI
+                        )
+                    if import_resp.status_code == 200:
+                        result = import_resp.json()
+                        msg = f"Imported **{result['imported']}** transactions"
+                        if result.get('rule_categorized', 0) > 0:
+                            msg += f", {result['rule_categorized']} categorized by rules"
+                        if result.get('ai_categorized', 0) > 0:
+                            msg += f", {result['ai_categorized']} categorized by AI"
+                        if result.get('skipped', 0) > 0:
+                            msg += f", {result['skipped']} skipped (duplicates)"
+                        st.success(msg)
+                        st.balloons()
+                    else:
+                        st.error(f"Import failed: {import_resp.text}")
+            else:
+                st.error(f"Preview failed: {preview_resp.text}")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ---------------------------------------------------------------------- Rules
 elif page == "Rules":

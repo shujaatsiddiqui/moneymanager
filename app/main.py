@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -232,6 +232,63 @@ def delete_transaction(tx_id: int, db: Session = Depends(get_db)):
     db.delete(_get(db, Transaction, tx_id))
     db.commit()
     return {"ok": True}
+
+
+# ---------- import ----------
+
+@app.get("/import/ai-status")
+def ai_status():
+    """Check if Ollama AI is available for categorization."""
+    available = services.check_ollama_available()
+    return {"available": available, "model": services.OLLAMA_MODEL}
+
+
+@app.post("/import")
+async def import_statement(
+    file: UploadFile = File(...),
+    account_id: int = Form(...),
+    use_ai: bool = Form(False),
+    db: Session = Depends(get_db)
+):
+    """Import transactions from a CSV/Excel bank statement (Chase or Bank of America)."""
+    _get(db, Account, account_id)  # Verify account exists
+
+    content = await file.read()
+    filename = file.filename or "statement.csv"
+
+    transactions, bank_format = services.parse_statement(content, filename)
+
+    if not transactions:
+        raise HTTPException(400, "No valid transactions found in file. Check that the file has Date, Description, and Amount columns.")
+
+    result = services.import_transactions(db, transactions, account_id, use_ai=use_ai)
+    result["format"] = bank_format
+    result["total_in_file"] = len(transactions)
+
+    return result
+
+
+@app.post("/import/preview")
+async def preview_import(file: UploadFile = File(...)):
+    """Preview transactions from a CSV/Excel without importing."""
+    content = await file.read()
+    filename = file.filename or "statement.csv"
+
+    transactions, bank_format = services.parse_statement(content, filename)
+
+    return {
+        "format": bank_format,
+        "count": len(transactions),
+        "transactions": [
+            {
+                "date": tx["date"].isoformat(),
+                "description": tx["description"],
+                "amount": tx["amount"],
+                "kind": tx["kind"],
+            }
+            for tx in transactions[:50]  # Preview first 50
+        ]
+    }
 
 
 # ---------- rules ----------

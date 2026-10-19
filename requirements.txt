@@ -6,3 +6,5 @@ requests
 pandas
 pytest
 httpx
+python-multipart
+openpyxl
