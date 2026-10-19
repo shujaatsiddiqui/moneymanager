@@ -282,14 +282,14 @@ async def import_statement(
         content = await file.read()
         filename = file.filename or "statement.csv"
 
-        # Try to detect account from file content
+        # Try to detect account from file content and filename
         detected_account_id = None
         if auto_detect_account:
             try:
                 text = content.decode("utf-8")
             except UnicodeDecodeError:
                 text = content.decode("latin-1")
-            detected_account_id = services.detect_account_from_content(db, text)
+            detected_account_id = services.detect_account_from_content(db, text, filename)
 
         # Use detected account, or fall back to provided account_id
         target_account_id = detected_account_id or account_id
@@ -347,13 +347,13 @@ async def preview_import(file: UploadFile = File(...), db: Session = Depends(get
 
     transactions, bank_format = services.parse_statement(content, filename)
 
-    # Try to detect account
+    # Try to detect account from content and filename
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError:
         text = content.decode("latin-1")
 
-    detected_account_id = services.detect_account_from_content(db, text)
+    detected_account_id = services.detect_account_from_content(db, text, filename)
     detected_account_name = None
     if detected_account_id:
         acc = db.get(Account, detected_account_id)
@@ -416,6 +416,13 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
 def suggest(text: str, amount: Optional[float] = None, db: Session = Depends(get_db)):
     r = services.categorize(db, text, None if amount is None else services.to_cents(amount))
     return {"category_id": r.category_id if r else None, "rule_id": r.id if r else None}
+
+
+@app.get("/rules/suggest-pattern")
+def suggest_pattern(merchant: str):
+    """Use AI to suggest a good rule pattern for a merchant description."""
+    pattern = services.ai_suggest_rule_pattern(merchant)
+    return {"pattern": pattern}
 
 
 @app.post("/rules/apply")

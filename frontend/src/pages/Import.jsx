@@ -4,6 +4,7 @@ import { api } from '../api'
 export default function Import({ accounts }) {
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState([])
+  const [manualAccounts, setManualAccounts] = useState({}) // filename -> account_id
   const [useAi, setUseAi] = useState(true)
   const [autoDetect, setAutoDetect] = useState(true)
   const [aiAvail, setAiAvail] = useState(false)
@@ -36,10 +37,26 @@ export default function Import({ accounts }) {
     setImporting(true)
     setResults(null)
     try {
-      const result = await api.importFiles(files, null, useAi, autoDetect)
-      setResults(result)
+      // Import files one by one with their assigned accounts
+      const allResults = []
+      for (const p of previews) {
+        if (p.error) continue
+        const accountId = p.detected_account_id || manualAccounts[p.file.name]
+        if (!accountId) continue
+        const result = await api.importFiles([p.file], accountId, useAi, false)
+        allResults.push(result)
+      }
+      if (allResults.length === 1) {
+        setResults(allResults[0])
+      } else {
+        setResults({
+          files: allResults,
+          total_imported: allResults.reduce((sum, r) => sum + (r.imported || 0), 0)
+        })
+      }
       setFiles([])
       setPreviews([])
+      setManualAccounts({})
     } catch (e) {
       alert('Failed: ' + e.message)
     } finally {
@@ -140,27 +157,24 @@ export default function Import({ accounts }) {
                         <span className="text-green-600">Account: <b>{p.detected_account_name}</b></span>
                       ) : (
                         <span className="text-orange-600">
-                          Could not detect account.
-                          <span className="text-gray-500 ml-1">Set suffix on an account:</span>
+                          Could not detect account. Select below:
                         </span>
                       )}
                     </div>
 
-                    {/* Account Suffix Setup (if not detected) */}
+                    {/* Manual Account Selection (if not detected) */}
                     {!p.detected_account_name && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {accounts.map(acc => (
-                          <div key={acc.id} className="flex items-center gap-1 text-xs">
-                            <span>{acc.name}:</span>
-                            <input
-                              type="text"
-                              placeholder="1234"
-                              defaultValue={acc.account_suffix || ''}
-                              className="w-16 px-1 border rounded"
-                              onBlur={e => e.target.value && setAccountSuffix(acc.id, e.target.value)}
-                            />
-                          </div>
-                        ))}
+                      <div className="mb-2">
+                        <select
+                          value={manualAccounts[p.file.name] || ''}
+                          onChange={e => setManualAccounts(prev => ({ ...prev, [p.file.name]: parseInt(e.target.value) || null }))}
+                          className="p-1 border rounded text-sm"
+                        >
+                          <option value="">Select account...</option>
+                          {accounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
+                          ))}
+                        </select>
                       </div>
                     )}
 
@@ -202,14 +216,14 @@ export default function Import({ accounts }) {
 
         <button
           onClick={handleImport}
-          disabled={!files.length || importing || (autoDetect && previews.some(p => !p.detected_account_name && !p.error))}
+          disabled={!files.length || importing || previews.some(p => !p.error && !p.detected_account_id && !manualAccounts[p.file.name])}
           className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50"
         >
           {importing ? 'Importing...' : `Import ${files.length} file${files.length !== 1 ? 's' : ''}`}
         </button>
 
-        {autoDetect && previews.some(p => !p.detected_account_name && !p.error) && (
-          <p className="text-orange-600 text-sm mt-2">Set account suffixes above to enable import</p>
+        {previews.some(p => !p.error && !p.detected_account_id && !manualAccounts[p.file.name]) && (
+          <p className="text-orange-600 text-sm mt-2">Select an account for each file to enable import</p>
         )}
       </div>
     </div>

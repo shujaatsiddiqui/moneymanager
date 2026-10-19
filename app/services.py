@@ -213,6 +213,48 @@ def get_category_list(db: Session) -> list[dict]:
     return result
 
 
+def ai_suggest_rule_pattern(merchant: str) -> Optional[str]:
+    """Use Ollama to suggest a good rule pattern for a merchant."""
+    prompt = f"""Extract the merchant/company name from this transaction description. Return ONLY the core merchant name that would match similar transactions.
+
+Examples:
+- "STARBUCKS STORE #12345 NEW YORK" → "STARBUCKS"
+- "AMAZON.COM*1A2B3C4D5" → "AMAZON"
+- "TST* URBAN BIRD 026" → "TST* URBAN BIRD"
+- "WM SUPERCENTER #2918" → "WM SUPERCENTER"
+- "INDIA METRO SUPERMARKET" → "INDIA METRO"
+- "Zelle payment to JOHN DOE" → "Zelle payment to"
+
+Transaction: "{merchant}"
+
+Return ONLY the pattern (no quotes, no explanation):"""
+
+    try:
+        resp = requests.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+            timeout=30
+        )
+        if resp.status_code == 200:
+            result = resp.json().get("response", "").strip()
+            # Clean up the result
+            result = result.strip('"\'')
+            if result and len(result) >= 3 and len(result) <= 100:
+                return result
+    except Exception:
+        pass
+
+    # Fallback: extract first word(s) up to numbers/special sequences
+    import re
+    # Remove common suffixes like store numbers, transaction IDs
+    pattern = re.sub(r'[\s#*]+\d+.*$', '', merchant)
+    pattern = re.sub(r'\s+(STORE|BRANCH|LOCATION).*$', '', pattern, flags=re.IGNORECASE)
+    if pattern and len(pattern) >= 3:
+        return pattern.strip()
+
+    return None
+
+
 def ai_categorize_single(description: str, categories: list[dict]) -> Optional[int]:
     """Use Ollama to categorize a single transaction."""
     cat_list = "\n".join([f"- ID {c['id']}: {c['name']}" for c in categories])
@@ -313,9 +355,27 @@ def extract_account_suffixes(content: str) -> set[str]:
     return suffixes
 
 
-def detect_account_from_content(db: Session, content: str) -> Optional[int]:
-    """Try to detect which account this file belongs to based on account suffixes."""
+def extract_suffix_from_filename(filename: str) -> Optional[str]:
+    """Extract account suffix from filename like 'Chase3518_Activity.csv' or 'Chase_3518.csv'."""
+    # Find any 4-digit sequence in the filename
+    matches = re.findall(r'(\d{4})', filename)
+    # Return the first 4-digit match (usually the account suffix)
+    # Skip if it looks like a date (year like 2026)
+    for m in matches:
+        if not m.startswith('20') and not m.startswith('19'):
+            return m
+    return None
+
+
+def detect_account_from_content(db: Session, content: str, filename: str = "") -> Optional[int]:
+    """Try to detect which account this file belongs to based on account suffixes in content or filename."""
     suffixes = extract_account_suffixes(content)
+
+    # Also check filename for suffix
+    filename_suffix = extract_suffix_from_filename(filename)
+    if filename_suffix:
+        suffixes.add(filename_suffix)
+
     if not suffixes:
         return None
 
@@ -330,6 +390,12 @@ def detect_account_from_content(db: Session, content: str) -> Optional[int]:
     # If exactly one account matches, return it
     if len(accounts) == 1:
         return accounts[0].id
+
+    # If filename suffix matched an account, prefer that one
+    if filename_suffix and len(accounts) > 1:
+        for acc in accounts:
+            if acc.account_suffix == filename_suffix:
+                return acc.id
 
     # If multiple match, try to find the "primary" one (the account the file is FOR)
     # by looking at which suffix appears most in the file
@@ -406,7 +472,11 @@ def detect_csv_format(headers: list[str]) -> str:
     # BOFA format with Running Bal: Date, Description, Amount, Running Bal.
     if "date" in headers_lower and "running bal." in headers_lower:
         return "bofa"
+    # Chase checking format: Details, Posting Date, Description, Amount
     if "details" in headers_lower or "posting date" in headers_lower:
+        return "chase"
+    # Chase CC format: Transaction Date, Post Date, Description, Category, Type, Amount
+    if "transaction date" in headers_lower and "post date" in headers_lower:
         return "chase"
     if "running bal." in headers_lower or "running balance" in headers_lower:
         return "bofa"
