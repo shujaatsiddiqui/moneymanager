@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, formatMoney } from '../api'
 
 export default function Accounts() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [suffixes, setSuffixes] = useState({})
   const [saving, setSaving] = useState(null)
+
+  const viewTransactions = (account) => {
+    navigate(`/transactions?account=${account.id}&account_name=${encodeURIComponent(account.name)}`)
+  }
 
   const loadData = async () => {
     const result = await api.getAccounts()
@@ -68,7 +74,14 @@ export default function Accounts() {
             {data.accounts.map(a => (
               <tr key={a.id} className="border-b">
                 <td className="p-3">{a.group}</td>
-                <td className="p-3 font-medium">{a.name}</td>
+                <td className="p-3 font-medium">
+                  <button
+                    onClick={() => viewTransactions(a)}
+                    className="text-blue-600 hover:underline text-left"
+                  >
+                    {a.name}
+                  </button>
+                </td>
                 <td className="p-3">
                   <input
                     type="text"

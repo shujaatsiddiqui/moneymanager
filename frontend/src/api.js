@@ -36,6 +36,7 @@ export const api = {
   createRule: (data) => request('POST', '/rules', data),
   deleteRule: (id) => request('DELETE', `/rules/${id}`),
   applyRules: () => request('POST', '/rules/apply'),
+  suggestPattern: (merchant) => request('GET', `/rules/suggest-pattern?merchant=${encodeURIComponent(merchant)}`),
   getAiStatus: () => request('GET', '/import/ai-status'),
   importFiles: async (files, accountId, useAi, autoDetect = true) => {
     const formData = new FormData()
