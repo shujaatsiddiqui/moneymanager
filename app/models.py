@@ -26,6 +26,8 @@ class Account(Base):
     include_in_totals: Mapped[bool] = mapped_column(Boolean, default=True)
     is_business: Mapped[bool] = mapped_column(Boolean, default=False)
     sort: Mapped[int] = mapped_column(Integer, default=0)
+    # Last 4 digits of account number for auto-detection during import
+    account_suffix: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     __table_args__ = (UniqueConstraint("user_id", "name"),)
 
 

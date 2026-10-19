@@ -11,6 +11,7 @@ class AccountIn(BaseModel):
     opening: float = 0.0  # signed; negative on a card = you owe it
     include_in_totals: bool = True
     is_business: bool = False
+    account_suffix: Optional[str] = None  # Last 4 digits for auto-detection
 
 
 class AccountPatch(BaseModel):
@@ -18,6 +19,7 @@ class AccountPatch(BaseModel):
     opening: Optional[float] = None
     include_in_totals: Optional[bool] = None
     is_business: Optional[bool] = None
+    account_suffix: Optional[str] = None
 
 
 class CategoryIn(BaseModel):
@@ -53,8 +55,10 @@ class TransactionIn(BaseModel):
 
 class TransactionPatch(BaseModel):
     date: Optional[Date] = None
+    kind: Optional[Literal["expense", "income", "transfer"]] = None
     amount: Optional[float] = Field(default=None, gt=0)
     category_id: Optional[int] = None
+    to_account_id: Optional[int] = None  # For transfers
     merchant: Optional[str] = None
     note: Optional[str] = None
     account_id: Optional[int] = None

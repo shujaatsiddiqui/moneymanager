@@ -68,6 +68,7 @@ def accounts_summary(db: Session) -> dict:
             "id": a.id, "name": a.name, "group": a.group_name, "is_liability": a.is_liability,
             "include_in_totals": a.include_in_totals, "is_business": a.is_business,
             "opening": from_cents(a.opening_cents), "balance": from_cents(b),
+            "account_suffix": a.account_suffix,
         })
         if a.include_in_totals:
             if a.is_liability:
@@ -179,8 +180,10 @@ def categorize(db: Session, text: str, amount_cents: Optional[int] = None,
 
 
 def apply_rules_to_uncategorized(db: Session) -> int:
+    """Apply rules to all uncategorized transactions (both expense and income)."""
     txs = db.scalars(select(Transaction).where(
-        Transaction.user_id == USER_ID, Transaction.kind == "expense",
+        Transaction.user_id == USER_ID,
+        Transaction.kind.in_(["expense", "income"]),
         Transaction.category_id.is_(None))).all()
     n = 0
     for t in txs:
@@ -288,6 +291,94 @@ def check_ollama_available() -> bool:
     return False
 
 
+# ---------- Account detection from file ----------
+
+ACCOUNT_SUFFIX_PATTERNS = [
+    r"ACCT[#\s]*(\d{4})",           # "ACCT# 8747" or "ACCT 8747"
+    r"FROM CHK[#\s]*(\d{4})",       # "FROM CHK 1655"
+    r"TO CHK[#\s]*(\d{4})",         # "TO CHK 1655"
+    r"Account.*?(\d{4})\s*$",       # "Account Number: ****1234"
+    r"ending in (\d{4})",           # "ending in 1234"
+]
+
+ACCOUNT_SUFFIX_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in ACCOUNT_SUFFIX_PATTERNS]
+
+
+def extract_account_suffixes(content: str) -> set[str]:
+    """Extract all account number suffixes (last 4 digits) found in file content."""
+    suffixes = set()
+    for pattern in ACCOUNT_SUFFIX_PATTERNS_COMPILED:
+        for match in pattern.finditer(content):
+            suffixes.add(match.group(1))
+    return suffixes
+
+
+def detect_account_from_content(db: Session, content: str) -> Optional[int]:
+    """Try to detect which account this file belongs to based on account suffixes."""
+    suffixes = extract_account_suffixes(content)
+    if not suffixes:
+        return None
+
+    # Find accounts with matching suffixes
+    accounts = db.scalars(
+        select(Account).where(
+            Account.user_id == USER_ID,
+            Account.account_suffix.in_(suffixes)
+        )
+    ).all()
+
+    # If exactly one account matches, return it
+    if len(accounts) == 1:
+        return accounts[0].id
+
+    # If multiple match, try to find the "primary" one (the account the file is FOR)
+    # by looking at which suffix appears most in the file
+    if len(accounts) > 1:
+        suffix_counts = {}
+        for suffix in suffixes:
+            suffix_counts[suffix] = content.count(suffix)
+
+        # The account this file belongs to usually has its suffix appear less
+        # (transfers TO other accounts mention those accounts more)
+        # But let's use the first matching account from file header if possible
+        for acc in accounts:
+            if acc.account_suffix in suffixes:
+                return acc.id
+
+    return None
+
+
+# ---------- Transfer detection ----------
+
+TRANSFER_PATTERNS = [
+    # Credit card payments from checking
+    r"PAYMENT TO ACCT[#\s]*\d+",
+    r"ONLINE/MOBILE RECURRING FROM CHK",
+    r"ONLINE PAYMENT FROM CHK",
+    r"PAYMENT FROM CHK",
+    r"MOBILE PAYMENT.*TO ACCT",
+    # ACH transfers
+    r"ACH TRANSFER",
+    r"INTERNAL TRANSFER",
+    r"TRANSFER TO.*SAVINGS",
+    r"TRANSFER FROM.*SAVINGS",
+    r"TRANSFER TO.*CHECKING",
+    r"TRANSFER FROM.*CHECKING",
+    # Zelle between own accounts (typically includes your name)
+    # Note: Zelle to other people is NOT a transfer, so we don't include generic Zelle patterns
+]
+
+TRANSFER_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in TRANSFER_PATTERNS]
+
+
+def is_likely_transfer(description: str) -> bool:
+    """Check if a transaction description looks like an inter-account transfer."""
+    for pattern in TRANSFER_PATTERNS_COMPILED:
+        if pattern.search(description):
+            return True
+    return False
+
+
 # ---------- CSV import ----------
 
 def parse_date(date_str: str) -> Optional[date]:
@@ -311,6 +402,9 @@ def detect_csv_format(headers: list[str]) -> str:
     headers_lower = [h.lower().strip() for h in headers]
     # BOFA format: Posted Date, Reference Number, Payee, Address, Amount
     if "posted date" in headers_lower and "payee" in headers_lower:
+        return "bofa"
+    # BOFA format with Running Bal: Date, Description, Amount, Running Bal.
+    if "date" in headers_lower and "running bal." in headers_lower:
         return "bofa"
     if "details" in headers_lower or "posting date" in headers_lower:
         return "chase"
@@ -414,7 +508,20 @@ def parse_bofa_csv(content: str) -> list[dict]:
 
 def parse_csv_statement(content: str) -> tuple[list[dict], str]:
     """Parse CSV and return transactions with detected format."""
-    # Read first line to detect format
+    lines = content.split("\n")
+
+    # Find the actual header row (some BOFA files have summary at top)
+    header_idx = 0
+    for i, line in enumerate(lines):
+        line_lower = line.lower()
+        if "date" in line_lower and ("description" in line_lower or "payee" in line_lower):
+            header_idx = i
+            break
+
+    # If we found a header row that's not the first line, use content from there
+    if header_idx > 0:
+        content = "\n".join(lines[header_idx:])
+
     first_line = content.split("\n")[0]
     headers = [h.strip() for h in first_line.split(",")]
 
@@ -426,7 +533,7 @@ def parse_csv_statement(content: str) -> tuple[list[dict], str]:
         return parse_bofa_csv(content), "Bank of America"
     else:
         # Try generic parsing
-        return parse_chase_csv(content), "Generic"
+        return parse_bofa_csv(content), "Bank of America"
 
 
 def parse_excel_statement(content: bytes) -> tuple[list[dict], str]:
@@ -587,15 +694,17 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
 
         batch_hashes.add(import_hash)
 
-        # Auto-categorize with rules first
+        # Auto-categorize with rules (for both expense and income)
         amount_cents = to_cents(tx["amount"])
+        category_id = None
+
         rule = categorize(db, tx["description"], amount_cents, account_id)
         category_id = rule.category_id if rule else None
 
         if rule:
             rule_categorized += 1
         elif use_ai and tx["kind"] == "expense" and category_id is None:
-            # Try AI categorization
+            # Try AI categorization (only for expenses)
             ai_cat_id = ai_categorize_single(tx["description"], categories)
             if ai_cat_id:
                 category_id = ai_cat_id
@@ -607,7 +716,7 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
             kind=tx["kind"],
             amount_cents=amount_cents,
             account_id=account_id,
-            category_id=category_id if tx["kind"] == "expense" else None,
+            category_id=category_id,
             merchant=tx["description"][:200],
             note="",
             is_business=False,

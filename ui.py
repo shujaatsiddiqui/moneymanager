@@ -5,10 +5,20 @@ from datetime import date
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(page_title="Money Manager", page_icon="💰", layout="wide")
+
+# Handle browser back/forward buttons
+components.html("""
+<script>
+    window.addEventListener('popstate', function(event) {
+        window.location.reload();
+    });
+</script>
+""", height=0)
 
 
 def call(method, path, **kw):
@@ -59,16 +69,33 @@ def category_picker(cats, key, optional=True):
     return subs[s] if s else parent["id"]
 
 
-page = st.sidebar.radio("Money Manager", ["Dashboard", "Add transaction", "Transactions",
-                                          "Budgets", "Import", "Rules", "Accounts"],
-                        index=st.session_state.get("nav_index", 0))
-month = st.sidebar.selectbox("Month", month_options())
+# JavaScript to handle proper browser history
+def push_url_and_reload(params: dict):
+    """Push URL to browser history and reload so back button works."""
+    from urllib.parse import urlencode, quote
+    query = urlencode(params)
+    url = f"?{query}" if query else "/"
+    js = f"""
+    <script>
+        if (window.location.search !== '{url}') {{
+            window.history.pushState(null, '', '{url}');
+            window.location.reload();
+        }}
+    </script>
+    """
+    components.html(js, height=0)
 
-# Handle category filter from Dashboard click
-if "filter_category_id" not in st.session_state:
-    st.session_state.filter_category_id = None
-if "filter_category_name" not in st.session_state:
-    st.session_state.filter_category_name = None
+# Read URL query params
+query_params = st.query_params
+url_page = query_params.get("page", "Dashboard")
+url_category = query_params.get("category")
+url_category_name = query_params.get("category_name")
+
+pages = ["Dashboard", "Add transaction", "Transactions", "Budgets", "Import", "Rules", "Accounts"]
+default_index = pages.index(url_page) if url_page in pages else 0
+
+page = st.sidebar.radio("Money Manager", pages, index=default_index)
+month = st.sidebar.selectbox("Month", month_options())
 cats = call("get", "/categories") or []
 acc_data = call("get", "/accounts") or {"accounts": []}
 accounts = acc_data["accounts"]
@@ -92,12 +119,13 @@ if page == "Dashboard":
             spent = money(r['spent'])
             limit = money(r['limit'])
             col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-            # Make category clickable - redirect to Transactions page with filter
+            # Make category clickable - redirect to Transactions page with filter via URL
             if col1.button(f"**{cat_label}**", key=f"cat_{r['category_id']}", use_container_width=True):
-                st.session_state.filter_category_id = r["category_id"]
-                st.session_state.filter_category_name = r["category"]
-                st.session_state.nav_index = 2  # Transactions page index
-                st.rerun()
+                push_url_and_reload({
+                    "page": "Transactions",
+                    "category": str(r["category_id"]),
+                    "category_name": r["category"]
+                })
             col2.write(spent)
             col3.write(f"of {limit}")
             col4.write(left_text)
@@ -136,16 +164,14 @@ elif page == "Add transaction":
 
 # --------------------------------------------------------------- Transactions
 elif page == "Transactions":
-    # Check if we have a category filter from Dashboard
-    filter_cat_id = st.session_state.get("filter_category_id")
-    filter_cat_name = st.session_state.get("filter_category_name")
+    # Check if we have a category filter from URL
+    filter_cat_id = query_params.get("category")
+    filter_cat_name = query_params.get("category_name")
 
     if filter_cat_name:
         st.title(f"Transactions · {month} · {filter_cat_name}")
         if st.button("← Clear filter"):
-            st.session_state.filter_category_id = None
-            st.session_state.filter_category_name = None
-            st.rerun()
+            push_url_and_reload({"page": "Transactions"})
     else:
         st.title(f"Transactions · {month}")
 

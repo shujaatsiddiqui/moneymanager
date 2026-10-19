@@ -62,7 +62,8 @@ def create_account(body: schemas.AccountIn, db: Session = Depends(get_db)):
     a = Account(user_id=USER_ID, name=body.name, group_name=body.group,
                 is_liability=body.is_liability or body.group == "Card",
                 opening_cents=services.to_cents(body.opening),
-                include_in_totals=body.include_in_totals, is_business=body.is_business)
+                include_in_totals=body.include_in_totals, is_business=body.is_business,
+                account_suffix=body.account_suffix)
     db.add(a)
     try:
         db.commit()
@@ -219,10 +220,32 @@ def list_transactions(month: Optional[str] = Query(default=None, pattern=MONTH_P
 def update_transaction(tx_id: int, body: schemas.TransactionPatch, db: Session = Depends(get_db)):
     t = _get(db, Transaction, tx_id)
     data = body.model_dump(exclude_unset=True)
+
+    # Handle amount conversion
     if "amount" in data:
         t.amount_cents = services.to_cents(data.pop("amount"))
+
+    # Handle kind change
+    if "kind" in data:
+        new_kind = data.pop("kind")
+        if new_kind == "transfer":
+            # Transfers require to_account_id
+            to_acc_id = data.get("to_account_id")
+            if not to_acc_id:
+                raise HTTPException(400, "Transfers require to_account_id")
+            if to_acc_id == t.account_id:
+                raise HTTPException(400, "Transfer accounts must differ")
+            _get(db, Account, to_acc_id)
+            t.category_id = None  # Transfers don't have categories
+        else:
+            # If changing from transfer to expense/income, clear to_account_id
+            if t.kind == "transfer":
+                t.to_account_id = None
+        t.kind = new_kind
+
     for k, v in data.items():
         setattr(t, k, v)
+
     db.commit()
     return _tx_out(db, t)
 
@@ -245,40 +268,103 @@ def ai_status():
 
 @app.post("/import")
 async def import_statement(
-    file: UploadFile = File(...),
-    account_id: int = Form(...),
+    files: list[UploadFile] = File(...),
+    account_id: Optional[int] = Form(None),
     use_ai: bool = Form(False),
+    auto_detect_account: bool = Form(True),
     db: Session = Depends(get_db)
 ):
-    """Import transactions from a CSV/Excel bank statement (Chase or Bank of America)."""
-    _get(db, Account, account_id)  # Verify account exists
+    """Import transactions from CSV/Excel bank statements (Chase or Bank of America).
+    Supports multiple files. Can auto-detect account from file content."""
+    results = []
 
-    content = await file.read()
-    filename = file.filename or "statement.csv"
+    for file in files:
+        content = await file.read()
+        filename = file.filename or "statement.csv"
 
-    transactions, bank_format = services.parse_statement(content, filename)
+        # Try to detect account from file content
+        detected_account_id = None
+        if auto_detect_account:
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                text = content.decode("latin-1")
+            detected_account_id = services.detect_account_from_content(db, text)
 
-    if not transactions:
-        raise HTTPException(400, "No valid transactions found in file. Check that the file has Date, Description, and Amount columns.")
+        # Use detected account, or fall back to provided account_id
+        target_account_id = detected_account_id or account_id
 
-    result = services.import_transactions(db, transactions, account_id, use_ai=use_ai)
-    result["format"] = bank_format
-    result["total_in_file"] = len(transactions)
+        if not target_account_id:
+            results.append({
+                "filename": filename,
+                "error": "Could not detect account. Please select manually or set account suffix.",
+                "imported": 0,
+            })
+            continue
 
-    return result
+        # Verify account exists
+        try:
+            acc = _get(db, Account, target_account_id)
+        except HTTPException:
+            results.append({
+                "filename": filename,
+                "error": f"Account {target_account_id} not found",
+                "imported": 0,
+            })
+            continue
+
+        transactions, bank_format = services.parse_statement(content, filename)
+
+        if not transactions:
+            results.append({
+                "filename": filename,
+                "error": "No valid transactions found",
+                "imported": 0,
+            })
+            continue
+
+        result = services.import_transactions(db, transactions, target_account_id, use_ai=use_ai)
+        result["filename"] = filename
+        result["format"] = bank_format
+        result["total_in_file"] = len(transactions)
+        result["account_id"] = target_account_id
+        result["account_name"] = acc.name
+        result["auto_detected"] = detected_account_id is not None
+        results.append(result)
+
+    # If single file, return flat result for backward compatibility
+    if len(results) == 1:
+        return results[0]
+
+    return {"files": results, "total_imported": sum(r.get("imported", 0) for r in results)}
 
 
 @app.post("/import/preview")
-async def preview_import(file: UploadFile = File(...)):
+async def preview_import(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Preview transactions from a CSV/Excel without importing."""
     content = await file.read()
     filename = file.filename or "statement.csv"
 
     transactions, bank_format = services.parse_statement(content, filename)
 
+    # Try to detect account
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    detected_account_id = services.detect_account_from_content(db, text)
+    detected_account_name = None
+    if detected_account_id:
+        acc = db.get(Account, detected_account_id)
+        detected_account_name = acc.name if acc else None
+
     return {
+        "filename": filename,
         "format": bank_format,
         "count": len(transactions),
+        "detected_account_id": detected_account_id,
+        "detected_account_name": detected_account_name,
         "transactions": [
             {
                 "date": tx["date"].isoformat(),
@@ -336,3 +422,24 @@ def suggest(text: str, amount: Optional[float] = None, db: Session = Depends(get
 def apply_rules(db: Session = Depends(get_db)):
     """Run all rules over expenses that have no category yet."""
     return {"categorized": services.apply_rules_to_uncategorized(db)}
+
+
+@app.post("/transactions/detect-transfers")
+def detect_transfers(db: Session = Depends(get_db)):
+    """Scan existing transactions and mark transfers based on description patterns."""
+    txs = db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == USER_ID,
+            Transaction.kind.in_(["expense", "income"])
+        )
+    ).all()
+
+    updated = 0
+    for t in txs:
+        if services.is_likely_transfer(t.merchant):
+            t.kind = "transfer"
+            t.category_id = None  # Transfers don't have categories
+            updated += 1
+
+    db.commit()
+    return {"updated": updated}
