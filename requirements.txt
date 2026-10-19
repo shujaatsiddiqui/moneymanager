@@ -1,7 +1,6 @@
 fastapi
 uvicorn
 sqlalchemy>=2.0
-streamlit
 requests
 pandas
 pytest

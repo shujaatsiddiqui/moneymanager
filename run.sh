@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts Ollama (AI), the API (port 8000), and the UI (port 8501).
+# Starts Ollama (AI), the API (port 8000), and the React frontend (port 5173).
 set -e
 cd "$(dirname "$0")"
 
@@ -18,10 +18,25 @@ fi
 # Start API
 python3 -m uvicorn app.main:app --port 8000 &
 API_PID=$!
-echo "API started (PID $API_PID)"
+echo "API started on http://localhost:8000"
 
 # Cleanup on exit
-trap "kill $API_PID 2>/dev/null; kill $OLLAMA_PID 2>/dev/null" EXIT
+cleanup() {
+    kill $API_PID 2>/dev/null
+    kill $OLLAMA_PID 2>/dev/null
+    kill $FRONTEND_PID 2>/dev/null
+}
+trap cleanup EXIT
 
-# Start UI
-python3 -m streamlit run ui.py --server.headless true
+# Start React frontend
+cd frontend
+if [ ! -d "node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    npm install
+fi
+npm run dev &
+FRONTEND_PID=$!
+echo "Frontend started on http://localhost:5173"
+
+# Wait for any process to exit
+wait
