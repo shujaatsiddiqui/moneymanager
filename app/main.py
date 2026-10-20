@@ -3,7 +3,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -118,6 +118,112 @@ def update_category(category_id: int, body: schemas.CategoryPatch, db: Session =
     return {"ok": True}
 
 
+@app.get("/categories/{category_id}/transactions")
+def get_category_transactions(category_id: int, db: Session = Depends(get_db)):
+    """Get transaction counts for a category and its subcategories."""
+    c = _get(db, Category, category_id)
+    children = db.scalars(select(Category).where(Category.parent_id == category_id)).all()
+
+    result = []
+    # Check parent
+    parent_count = db.scalar(
+        select(func.count(Transaction.id)).where(Transaction.category_id == category_id)
+    ) or 0
+    if parent_count > 0:
+        result.append({"id": c.id, "name": c.name, "count": parent_count})
+
+    # Check children
+    for child in children:
+        child_count = db.scalar(
+            select(func.count(Transaction.id)).where(Transaction.category_id == child.id)
+        ) or 0
+        if child_count > 0:
+            result.append({"id": child.id, "name": child.name, "count": child_count})
+
+    total = sum(r["count"] for r in result)
+    return {"categories": result, "total": total, "child_count": len(children)}
+
+
+@app.post("/categories/{category_id}/move-transactions")
+def move_category_transactions(category_id: int, target_id: int = Query(...), db: Session = Depends(get_db)):
+    """Move all transactions from one category (and its children) to another category."""
+    source = _get(db, Category, category_id)
+    target = _get(db, Category, target_id)
+
+    # Get all category IDs to move from (parent + children)
+    children = db.scalars(select(Category).where(Category.parent_id == category_id)).all()
+    source_ids = [category_id] + [child.id for child in children]
+
+    # Move transactions
+    count = 0
+    for tx in db.scalars(select(Transaction).where(Transaction.category_id.in_(source_ids))):
+        tx.category_id = target_id
+        count += 1
+
+    db.commit()
+    return {"moved": count}
+
+
+@app.delete("/categories/{category_id}/cascade")
+def delete_category_cascade(category_id: int, db: Session = Depends(get_db)):
+    """Delete a category and all its subcategories (only if none have transactions)."""
+    c = _get(db, Category, category_id)
+    children = db.scalars(select(Category).where(Category.parent_id == category_id)).all()
+
+    # Check if parent or any child has transactions
+    all_ids = [category_id] + [child.id for child in children]
+    tx_count = db.scalar(
+        select(func.count(Transaction.id)).where(Transaction.category_id.in_(all_ids))
+    )
+    if tx_count and tx_count > 0:
+        raise HTTPException(400, f"Cannot delete: category or subcategories have {tx_count} transactions. Reassign them first.")
+
+    # Delete budgets and rules for all
+    for cat_id in all_ids:
+        for b in db.scalars(select(Budget).where(Budget.category_id == cat_id)):
+            db.delete(b)
+        for r in db.scalars(select(Rule).where(Rule.category_id == cat_id)):
+            db.delete(r)
+
+    # Delete children first, then parent
+    for child in children:
+        db.delete(child)
+    db.delete(c)
+    db.commit()
+    return {"ok": True, "deleted": len(all_ids)}
+
+
+@app.delete("/categories/{category_id}")
+def delete_category(category_id: int, db: Session = Depends(get_db)):
+    c = _get(db, Category, category_id)
+    # Check if category has children
+    children = db.scalars(select(Category).where(Category.parent_id == category_id)).all()
+    if children:
+        # Check if any child has transactions
+        child_ids = [child.id for child in children]
+        child_tx_count = db.scalar(
+            select(func.count(Transaction.id)).where(Transaction.category_id.in_(child_ids))
+        )
+        if child_tx_count and child_tx_count > 0:
+            raise HTTPException(400, f"Cannot delete: subcategories have {child_tx_count} transactions. Reassign them first.")
+        raise HTTPException(400, f"Cannot delete category with {len(children)} subcategories. Delete subcategories first.")
+    # Check if category has transactions
+    tx_count = db.scalar(
+        select(func.count(Transaction.id)).where(Transaction.category_id == category_id)
+    )
+    if tx_count and tx_count > 0:
+        raise HTTPException(400, f"Cannot delete category with {tx_count} transactions. Reassign them first.")
+    # Delete any budgets for this category
+    for b in db.scalars(select(Budget).where(Budget.category_id == category_id)):
+        db.delete(b)
+    # Delete any rules for this category
+    for r in db.scalars(select(Rule).where(Rule.category_id == category_id)):
+        db.delete(r)
+    db.delete(c)
+    db.commit()
+    return {"ok": True}
+
+
 # ---------- budgets ----------
 
 @app.get("/budgets/status")
@@ -199,7 +305,8 @@ def create_transaction(body: schemas.TransactionIn, db: Session = Depends(get_db
 @app.get("/transactions")
 def list_transactions(month: Optional[str] = Query(default=None, pattern=MONTH_PATTERN),
                       account_id: Optional[int] = None, category_id: Optional[int] = None,
-                      uncategorized: bool = False, limit: int = Query(500, le=5000),
+                      uncategorized: bool = False, unbudgeted: bool = False,
+                      excluded: bool = False, limit: int = Query(500, le=5000),
                       db: Session = Depends(get_db)):
     q = select(Transaction).where(Transaction.user_id == USER_ID)
     if month:
@@ -212,6 +319,19 @@ def list_transactions(month: Optional[str] = Query(default=None, pattern=MONTH_P
         q = q.where(Transaction.category_id.in_(ids))
     if uncategorized:
         q = q.where(Transaction.kind == "expense", Transaction.category_id.is_(None))
+    if unbudgeted and month:
+        # Get budgeted category IDs for this month
+        budgeted_ids = services.get_budgeted_category_ids(db, month)
+        excluded_ids = services.get_excluded_category_ids(db)
+        q = q.where(
+            Transaction.kind == "expense",
+            Transaction.category_id.isnot(None),
+            Transaction.category_id.notin_(budgeted_ids),
+            Transaction.category_id.notin_(excluded_ids)
+        )
+    if excluded:
+        excluded_ids = services.get_excluded_category_ids(db)
+        q = q.where(Transaction.kind == "expense", Transaction.category_id.in_(excluded_ids))
     q = q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit)
     return [_tx_out(db, t) for t in db.scalars(q)]
 

@@ -150,6 +150,35 @@ def budget_status(db: Session, month: str) -> dict:
     }
 
 
+def get_budgeted_category_ids(db: Session, month: str) -> set[int]:
+    """Get all category IDs that are covered by a budget for the given month."""
+    cats = {c.id: c for c in db.scalars(select(Category).where(Category.user_id == USER_ID))}
+    children = defaultdict(list)
+    for c in cats.values():
+        if c.parent_id:
+            children[c.parent_id].append(c.id)
+
+    budgets = db.scalars(select(Budget).where(Budget.user_id == USER_ID, Budget.month == month)).all()
+    covered = set()
+    for b in budgets:
+        covered.add(b.category_id)
+        covered.update(children.get(b.category_id, []))
+    return covered
+
+
+def get_excluded_category_ids(db: Session) -> set[int]:
+    """Get all category IDs that are excluded from budget."""
+    cats = db.scalars(select(Category).where(Category.user_id == USER_ID)).all()
+    excluded = set()
+    parent_excluded = {c.id for c in cats if c.exclude_from_budget and c.parent_id is None}
+    for c in cats:
+        if c.exclude_from_budget:
+            excluded.add(c.id)
+        elif c.parent_id in parent_excluded:
+            excluded.add(c.id)
+    return excluded
+
+
 # ---------- rules / categorizer ----------
 
 def _matches(rule: Rule, text: str, amount_cents: Optional[int], account_id: Optional[int]) -> bool:

@@ -8,12 +8,14 @@ import Budgets from './pages/Budgets'
 import Import from './pages/Import'
 import Rules from './pages/Rules'
 import Accounts from './pages/Accounts'
+import Categories from './pages/Categories'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: '📊' },
   { path: '/add', label: 'Add Transaction', icon: '➕' },
   { path: '/transactions', label: 'Transactions', icon: '📜' },
   { path: '/budgets', label: 'Budgets', icon: '💰' },
+  { path: '/categories', label: 'Categories', icon: '🏷️' },
   { path: '/import', label: 'Import', icon: '📥' },
   { path: '/rules', label: 'Rules', icon: '📋' },
   { path: '/accounts', label: 'Accounts', icon: '🏦' },
@@ -74,6 +76,7 @@ export default function App() {
           <Route path="/budgets" element={<Budgets month={month} categories={categories} />} />
           <Route path="/import" element={<Import accounts={accounts} />} />
           <Route path="/rules" element={<Rules categories={categories} />} />
+          <Route path="/categories" element={<Categories />} />
           <Route path="/accounts" element={<Accounts />} />
         </Routes>
       </main>

@@ -25,13 +25,18 @@ export default function Transactions({ month, categories, accounts }) {
   const categoryName = searchParams.get('category_name')
   const accountId = searchParams.get('account')
   const accountName = searchParams.get('account_name')
+  const showUnbudgeted = searchParams.get('unbudgeted') === 'true'
+  const showUncategorized = searchParams.get('uncategorized') === 'true'
+  const showExcluded = searchParams.get('excluded') === 'true'
 
   const loadTransactions = async () => {
     setLoading(true)
-    const params = { uncategorized: onlyUncat }
+    const params = { uncategorized: onlyUncat || showUncategorized }
     if (!accountId) params.month = month  // Only filter by month if not filtering by account
     if (categoryId) params.category_id = categoryId
     if (accountId) params.account_id = accountId
+    if (showUnbudgeted) params.unbudgeted = true
+    if (showExcluded) params.excluded = true
     try {
       setTransactions(await api.getTransactions(params))
     } catch (e) {
@@ -41,7 +46,7 @@ export default function Transactions({ month, categories, accounts }) {
     }
   }
 
-  useEffect(() => { loadTransactions() }, [month, categoryId, accountId, onlyUncat])
+  useEffect(() => { loadTransactions() }, [month, categoryId, accountId, onlyUncat, showUnbudgeted, showUncategorized, showExcluded])
 
   const clearFilter = () => {
     const params = new URLSearchParams(searchParams)
@@ -49,8 +54,13 @@ export default function Transactions({ month, categories, accounts }) {
     params.delete('category_name')
     params.delete('account')
     params.delete('account_name')
+    params.delete('unbudgeted')
+    params.delete('uncategorized')
+    params.delete('excluded')
     setSearchParams(params)
   }
+
+  const hasSpecialFilter = categoryName || accountName || showUnbudgeted || showUncategorized || showExcluded
 
   const changeMonth = (direction) => {
     const [year, mon] = month.split('-').map(Number)
@@ -237,6 +247,9 @@ export default function Transactions({ month, categories, accounts }) {
           </select>
           {categoryName && <span className="text-xl text-gray-500">· {categoryName}</span>}
           {accountName && <span className="text-xl text-gray-500">· {accountName}</span>}
+          {showUnbudgeted && <span className="text-xl text-orange-500">· Unbudgeted</span>}
+          {showUncategorized && <span className="text-xl text-red-500">· Uncategorized</span>}
+          {showExcluded && <span className="text-xl text-gray-500">· Excluded</span>}
         </div>
         <button onClick={() => changeMonth(1)} className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
           Next →
@@ -250,7 +263,7 @@ export default function Transactions({ month, categories, accounts }) {
             <input type="checkbox" checked={onlyUncat} onChange={e => setOnlyUncat(e.target.checked)} className="rounded"/>
             Only uncategorized
           </label>
-          {(categoryName || accountName) && (
+          {hasSpecialFilter && (
             <button onClick={clearFilter} className="px-3 py-1 text-sm bg-gray-100 rounded-lg hover:bg-gray-200">
               ✕ Clear filter
             </button>

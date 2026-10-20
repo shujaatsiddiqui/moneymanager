@@ -19,6 +19,12 @@ async function request(method, path, body = null) {
 export const api = {
   getAccounts: () => request('GET', '/accounts'),
   getCategories: () => request('GET', '/categories'),
+  createCategory: (data) => request('POST', '/categories', data),
+  updateCategory: (id, data) => request('PATCH', `/categories/${id}`, data),
+  deleteCategory: (id) => request('DELETE', `/categories/${id}`),
+  deleteCategoryCascade: (id) => request('DELETE', `/categories/${id}/cascade`),
+  getCategoryTransactions: (id) => request('GET', `/categories/${id}/transactions`),
+  moveCategoryTransactions: (fromId, toId) => request('POST', `/categories/${fromId}/move-transactions?target_id=${toId}`),
   getBudgetStatus: (month) => request('GET', `/budgets/status?month=${month}`),
   setBudget: (data) => request('PUT', '/budgets', data),
   deleteBudget: (categoryId, month) =>

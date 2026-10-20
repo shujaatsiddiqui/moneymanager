@@ -105,18 +105,27 @@ export default function Dashboard({ month }) {
 
       {/* Footer Stats */}
       <div className="grid grid-cols-3 gap-4 mt-8">
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
+        <button
+          onClick={() => navigate(`/transactions?month=${month}&unbudgeted=true`)}
+          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-orange-50 transition-colors"
+        >
           <div className="text-sm text-gray-500">Unbudgeted</div>
           <div className="text-xl font-bold text-orange-600">{formatMoney(status.unbudgeted_spent)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
+        </button>
+        <button
+          onClick={() => navigate(`/transactions?month=${month}&uncategorized=true`)}
+          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-red-50 transition-colors"
+        >
           <div className="text-sm text-gray-500">Uncategorized</div>
           <div className="text-xl font-bold text-red-600">{formatMoney(status.uncategorized_spent)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
+        </button>
+        <button
+          onClick={() => navigate(`/transactions?month=${month}&excluded=true`)}
+          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-gray-100 transition-colors"
+        >
           <div className="text-sm text-gray-500">Excluded</div>
           <div className="text-xl font-bold text-gray-600">{formatMoney(status.excluded_spent)}</div>
-        </div>
+        </button>
       </div>
     </div>
   )
