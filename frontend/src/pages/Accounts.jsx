@@ -66,6 +66,7 @@ export default function Accounts() {
               <th className="text-left p-3">Suffix (last 4)</th>
               <th className="text-right p-3">Balance</th>
               <th className="text-right p-3">Opening</th>
+              <th className="text-left p-3">Last Import</th>
               <th className="text-center p-3">In Totals</th>
               <th className="text-center p-3">Business</th>
             </tr>
@@ -97,6 +98,14 @@ export default function Accounts() {
                 </td>
                 <td className={`p-3 text-right font-mono ${a.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatMoney(a.balance)}</td>
                 <td className="p-3 text-right font-mono text-gray-500">{formatMoney(a.opening)}</td>
+                <td className="p-3 text-sm text-gray-500">
+                  {a.last_tx_date ? (
+                    <div>
+                      <div>{a.last_tx_date}</div>
+                      <div className="text-xs">{a.last_import_at ? new Date(a.last_import_at).toLocaleString() : ''}</div>
+                    </div>
+                  ) : '—'}
+                </td>
                 <td className="p-3 text-center">{a.include_in_totals ? '✓' : '—'}</td>
                 <td className="p-3 text-center">{a.is_business ? '✓' : '—'}</td>
               </tr>
