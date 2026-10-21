@@ -48,7 +48,7 @@ class TransactionIn(BaseModel):
     account_id: int
     to_account_id: Optional[int] = None  # transfers only
     category_id: Optional[int] = None
-    merchant: str = ""
+    description: str = ""
     note: str = ""
     is_business: bool = False
 
@@ -59,7 +59,7 @@ class TransactionPatch(BaseModel):
     amount: Optional[float] = Field(default=None, gt=0)
     category_id: Optional[int] = None
     to_account_id: Optional[int] = None  # For transfers
-    merchant: Optional[str] = None
+    description: Optional[str] = None
     note: Optional[str] = None
     account_id: Optional[int] = None
 

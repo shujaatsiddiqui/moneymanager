@@ -17,7 +17,6 @@ export default function Transactions({ month, categories, accounts }) {
     account: '',
     toAccount: '',
     category: '',
-    merchant: '',
     description: '',
     minAmount: '',
     maxAmount: '',
@@ -101,14 +100,14 @@ export default function Transactions({ month, categories, accounts }) {
       const seenPatterns = new Set()
       for (const tx of selectedTxs) {
         try {
-          const { pattern } = await api.suggestPattern(tx.merchant)
+          const { pattern } = await api.suggestPattern(tx.description)
           if (pattern && pattern.length >= 3 && !seenPatterns.has(pattern.toLowerCase())) {
             seenPatterns.add(pattern.toLowerCase())
             await api.createRule({ pattern, category_id: categoryId, priority: 100 })
           }
         } catch (e) {
           // Fallback: use first word
-          const pattern = tx.merchant.split(/\s+/)[0]
+          const pattern = tx.description.split(/\s+/)[0]
           if (pattern && pattern.length >= 3 && !seenPatterns.has(pattern.toLowerCase())) {
             seenPatterns.add(pattern.toLowerCase())
             try {
@@ -164,7 +163,6 @@ export default function Transactions({ month, categories, accounts }) {
     if (filters.account && !tx.account?.toLowerCase().includes(filters.account.toLowerCase())) return false
     if (filters.toAccount && !tx.to_account?.toLowerCase().includes(filters.toAccount.toLowerCase())) return false
     if (filters.category && !tx.category?.toLowerCase().includes(filters.category.toLowerCase())) return false
-    if (filters.merchant && !tx.merchant?.toLowerCase().includes(filters.merchant.toLowerCase())) return false
     if (filters.description && !tx.description?.toLowerCase().includes(filters.description.toLowerCase())) return false
     if (filters.minAmount && tx.amount < parseFloat(filters.minAmount)) return false
     if (filters.maxAmount && tx.amount > parseFloat(filters.maxAmount)) return false
@@ -195,9 +193,9 @@ export default function Transactions({ month, categories, accounts }) {
         aVal = a.category || ''
         bVal = b.category || ''
         break
-      case 'merchant':
-        aVal = a.merchant || ''
-        bVal = b.merchant || ''
+      case 'description':
+        aVal = a.description || ''
+        bVal = b.description || ''
         break
       default:
         return 0
@@ -358,8 +356,7 @@ export default function Transactions({ month, categories, accounts }) {
                   <th className="p-3 text-left">From</th>
                   <th className="p-3 text-left">To</th>
                   <SortHeader field="category" className="text-left">Category</SortHeader>
-                  <SortHeader field="merchant" className="text-left">Merchant</SortHeader>
-                  <th className="p-3 text-left">Description</th>
+                  <SortHeader field="description" className="text-left">Description</SortHeader>
                 </tr>
                 <tr className="border-b bg-gray-50">
                   <td className="p-2"></td>
@@ -428,15 +425,6 @@ export default function Transactions({ month, categories, accounts }) {
                     <input
                       type="text"
                       placeholder="Filter..."
-                      value={filters.merchant}
-                      onChange={e => updateFilter('merchant', e.target.value)}
-                      className="w-full p-1 text-xs border rounded"
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="text"
-                      placeholder="Filter..."
                       value={filters.description}
                       onChange={e => updateFilter('description', e.target.value)}
                       className="w-full p-1 text-xs border rounded"
@@ -476,8 +464,7 @@ export default function Transactions({ month, categories, accounts }) {
                     <td className="p-3">{tx.account || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3">{tx.to_account || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3">{tx.category || <span className="text-gray-400">—</span>}</td>
-                    <td className="p-3 truncate max-w-[200px]">{tx.merchant}</td>
-                    <td className="p-3 truncate max-w-[300px] text-gray-500 text-xs">{tx.description}</td>
+                    <td className="p-3 truncate max-w-[300px]">{tx.description}</td>
                   </tr>
                 ))}
               </tbody>
@@ -490,7 +477,7 @@ export default function Transactions({ month, categories, accounts }) {
                 <div className="text-sm text-gray-500">Selected: <strong>{selectedTxIds.length}</strong> transaction(s)</div>
                 {selectedTxIds.length <= 3 && selectedTransactions.map(tx => (
                   <div key={tx.id} className="text-sm text-gray-600 truncate">
-                    {tx.merchant} · {formatMoney(tx.amount)}
+                    {tx.description} · {formatMoney(tx.amount)}
                   </div>
                 ))}
                 {selectedTxIds.length > 3 && (

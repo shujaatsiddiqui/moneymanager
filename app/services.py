@@ -232,7 +232,7 @@ def apply_rules_to_uncategorized(db: Session) -> int:
         Transaction.category_id.is_(None))).all()
     n = 0
     for t in txs:
-        r = categorize(db, f"{t.merchant} {t.note}", t.amount_cents, t.account_id)
+        r = categorize(db, f"{t.description} {t.note}", t.amount_cents, t.account_id)
         if r:
             t.category_id = r.category_id
             n += 1
@@ -936,7 +936,6 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
                 account_id=source_account_id,
                 to_account_id=dest_account_id,
                 category_id=None,
-                merchant=tx["description"][:200],
                 description=tx["description"][:500],
                 note="",
                 is_business=False,
@@ -953,7 +952,6 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
                 account_id=dest_account_id,
                 to_account_id=source_account_id,
                 category_id=None,
-                merchant=tx["description"][:200],
                 description=tx["description"][:500],
                 note="",
                 is_business=False,
@@ -985,7 +983,6 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
             account_id=account_id,
             to_account_id=None,
             category_id=category_id,
-            merchant=tx["description"][:200],
             description=tx["description"][:500],
             note="",
             is_business=False,

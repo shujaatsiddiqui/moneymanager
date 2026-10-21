@@ -45,7 +45,7 @@ def _tx_out(db: Session, t: Transaction, auto: bool = False) -> dict:
         "to_account_id": t.to_account_id, "to_account": to_acc.name if to_acc else None,
         "category_id": t.category_id,
         "category": (f"{parent.name} > {cat.name}" if parent else cat.name) if cat else None,
-        "merchant": t.merchant, "description": t.description, "note": t.note, "is_business": t.is_business,
+        "description": t.description, "note": t.note, "is_business": t.is_business,
         "auto_categorized": auto,
     }
 
@@ -290,13 +290,13 @@ def create_transaction(body: schemas.TransactionIn, db: Session = Depends(get_db
     if cat_id is not None:
         _get(db, Category, cat_id)
     elif body.kind == "expense":
-        rule = services.categorize(db, f"{body.merchant} {body.note}", cents, body.account_id)
+        rule = services.categorize(db, f"{body.description} {body.note}", cents, body.account_id)
         if rule:
             cat_id, auto = rule.category_id, True
     t = Transaction(user_id=USER_ID, date=body.date, kind=body.kind, amount_cents=cents,
                     account_id=body.account_id, to_account_id=body.to_account_id,
                     category_id=None if body.kind == "transfer" else cat_id,
-                    merchant=body.merchant, note=body.note, is_business=body.is_business)
+                    description=body.description, note=body.note, is_business=body.is_business)
     db.add(t)
     db.commit()
     return _tx_out(db, t, auto)
@@ -563,7 +563,7 @@ def detect_transfers(db: Session = Depends(get_db)):
 
     updated = 0
     for t in txs:
-        if services.is_likely_transfer(t.merchant):
+        if services.is_likely_transfer(t.description):
             t.kind = "transfer"
             t.category_id = None  # Transfers don't have categories
             updated += 1

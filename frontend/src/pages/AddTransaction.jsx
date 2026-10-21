@@ -8,7 +8,7 @@ export default function AddTransaction({ categories, accounts }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id || '')
   const [toAccountId, setToAccountId] = useState('')
   const [categoryId, setCategoryId] = useState('')
-  const [merchant, setMerchant] = useState('')
+  const [description, setDescription] = useState('')
   const [note, setNote] = useState('')
   const [isBiz, setIsBiz] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -27,12 +27,12 @@ export default function AddTransaction({ categories, accounts }) {
         date, kind, amount: parseFloat(amount), account_id: parseInt(accountId),
         to_account_id: kind === 'transfer' ? parseInt(toAccountId) : null,
         category_id: kind !== 'transfer' && categoryId ? parseInt(categoryId) : null,
-        merchant, note, is_business: isBiz
+        description, note, is_business: isBiz
       })
       let m = `Saved ${formatMoney(r.amount)}`
       if (r.category) m += ` → ${r.category}${r.auto_categorized ? ' (auto)' : ''}`
       setMsg({ type: 'success', text: m })
-      setAmount(''); setMerchant(''); setNote('')
+      setAmount(''); setDescription(''); setNote('')
     } catch (err) { setMsg({ type: 'error', text: err.message }) }
   }
 
@@ -71,7 +71,7 @@ export default function AddTransaction({ categories, accounts }) {
             {flatCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>}
-        <div className="mb-4"><label className="block text-sm mb-1">Merchant</label><input type="text" value={merchant} onChange={e => setMerchant(e.target.value)} className="w-full p-2 border rounded-lg"/></div>
+        <div className="mb-4"><label className="block text-sm mb-1">Description</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full p-2 border rounded-lg"/></div>
         <div className="mb-4"><label className="block text-sm mb-1">Note</label><input type="text" value={note} onChange={e => setNote(e.target.value)} className="w-full p-2 border rounded-lg"/></div>
         <label className="flex items-center gap-2 mb-6"><input type="checkbox" checked={isBiz} onChange={e => setIsBiz(e.target.checked)} className="rounded"/><span className="text-sm">Business</span></label>
         <button type="submit" disabled={!amount || parseFloat(amount) <= 0} className="w-full py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">Save</button>
