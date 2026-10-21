@@ -14,4 +14,12 @@ Add a new section to the dashboard showing how much amount has been set aside se
 
 ---
 
+### 2. Apple Card Integration
+**Priority:** Medium
+**Status:** Pending
+
+Add support for importing Apple Card transactions.
+
+---
+
 *Last updated: 2026-10-21*
