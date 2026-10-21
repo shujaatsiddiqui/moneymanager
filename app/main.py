@@ -45,7 +45,7 @@ def _tx_out(db: Session, t: Transaction, auto: bool = False) -> dict:
         "to_account_id": t.to_account_id, "to_account": to_acc.name if to_acc else None,
         "category_id": t.category_id,
         "category": (f"{parent.name} > {cat.name}" if parent else cat.name) if cat else None,
-        "merchant": t.merchant, "note": t.note, "is_business": t.is_business,
+        "merchant": t.merchant, "description": t.description, "note": t.note, "is_business": t.is_business,
         "auto_categorized": auto,
     }
 

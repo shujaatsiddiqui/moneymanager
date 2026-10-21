@@ -65,6 +65,7 @@ class Transaction(Base):
     to_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
     category_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     merchant: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(500), default="")  # original bank description
     note: Mapped[str] = mapped_column(String(500), default="")
     is_business: Mapped[bool] = mapped_column(Boolean, default=False)
     # Reserved for bank imports later (duplicate detection).
