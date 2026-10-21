@@ -313,7 +313,7 @@ def list_transactions(month: Optional[str] = Query(default=None, pattern=MONTH_P
         start, end = services.month_range(month)
         q = q.where(Transaction.date >= start, Transaction.date < end)
     if account_id:
-        q = q.where((Transaction.account_id == account_id) | (Transaction.to_account_id == account_id))
+        q = q.where(Transaction.account_id == account_id)
     if category_id:
         ids = [category_id] + [c.id for c in db.scalars(select(Category).where(Category.parent_id == category_id))]
         q = q.where(Transaction.category_id.in_(ids))

@@ -59,7 +59,7 @@ class Transaction(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, default=USER_ID, index=True)
     date: Mapped[date_type] = mapped_column(Date, index=True)
-    kind: Mapped[str] = mapped_column(String(10))  # expense / income / transfer
+    kind: Mapped[str] = mapped_column(String(15))  # expense / income / transfer_out / transfer_in
     amount_cents: Mapped[int] = mapped_column(Integer)  # always positive
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
     to_account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)

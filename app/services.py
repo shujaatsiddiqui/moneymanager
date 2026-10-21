@@ -41,20 +41,16 @@ def account_balances(db: Session) -> dict:
     """Signed balance per account. Cards go negative when you owe money."""
     bal = {a.id: a.opening_cents for a in db.scalars(select(Account).where(Account.user_id == USER_ID))}
     rows = db.execute(
-        select(Transaction.account_id, Transaction.to_account_id, Transaction.kind,
+        select(Transaction.account_id, Transaction.kind,
                func.sum(Transaction.amount_cents))
         .where(Transaction.user_id == USER_ID)
-        .group_by(Transaction.account_id, Transaction.to_account_id, Transaction.kind)
+        .group_by(Transaction.account_id, Transaction.kind)
     ).all()
-    for acc, to_acc, kind, total in rows:
-        if kind == "expense":
+    for acc, kind, total in rows:
+        if kind in ("expense", "transfer_out"):
             bal[acc] -= total
-        elif kind == "income":
+        elif kind in ("income", "transfer_in"):
             bal[acc] += total
-        elif kind == "transfer":
-            bal[acc] -= total
-            if to_acc in bal:
-                bal[to_acc] += total
     return bal
 
 
@@ -474,6 +470,8 @@ TRANSFER_PATTERNS = [
     r"MOBILE PAYMENT.*TO ACCT",
     r"AUTOMATIC PAYMENT.*THANK",
     r"AUTOPAY PAYMENT.*THANK",
+    r"Online Banking payment to CRD",
+    r"PAYMENT TO CRD",
     # Online transfers between accounts
     r"Online Transfer from\s+CHK",
     r"Online Transfer to\s+CHK",
@@ -497,12 +495,63 @@ TRANSFER_PATTERNS = [
 
 TRANSFER_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in TRANSFER_PATTERNS]
 
+# Patterns to extract account suffix (last 4 digits) from transfer descriptions
+ACCOUNT_SUFFIX_PATTERNS = [
+    r"payment to (?:CRD|card|acct)[#\s]*(\d{4})",
+    r"payment to.*ACCT#?\s*(\d{4})",
+    r"to (?:CRD|card|acct|SAV|CHK)[#\s\.]*(\d{4})",
+    r"from (?:CRD|card|acct|SAV|CHK)[#\s\.]*(\d{4})",
+    r"CRD[#\s]*(\d{4})",
+    r"ACCT#?\s*(\d{4})",
+    r"SAV\s*[\.]*(\d{4})",
+    r"CHK\s*[\.]*(\d{4})",
+    r"[\.\s]+(\d{4})\s+trans",  # "...5096 transaction"
+]
+ACCOUNT_SUFFIX_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in ACCOUNT_SUFFIX_PATTERNS]
 
-def is_likely_transfer(description: str) -> bool:
-    """Check if a transaction description looks like an inter-account transfer."""
+
+def extract_account_suffix_from_description(description: str) -> Optional[str]:
+    """Extract potential account suffix (last 4 digits) from a transfer description."""
+    for pattern in ACCOUNT_SUFFIX_PATTERNS_COMPILED:
+        match = pattern.search(description)
+        if match:
+            return match.group(1)
+    return None
+
+
+def get_account_suffixes(db: Session) -> set[str]:
+    """Get all account suffixes from the database."""
+    accounts = db.scalars(select(Account).where(Account.user_id == USER_ID)).all()
+    return {a.account_suffix for a in accounts if a.account_suffix}
+
+
+def get_account_by_suffix(db: Session, suffix: str) -> Optional[int]:
+    """Get account ID by its suffix (last 4 digits)."""
+    if not suffix:
+        return None
+    account = db.scalars(
+        select(Account).where(Account.user_id == USER_ID, Account.account_suffix == suffix)
+    ).first()
+    return account.id if account else None
+
+
+def is_likely_transfer(description: str, account_suffixes: Optional[set[str]] = None) -> bool:
+    """Check if a transaction description looks like an inter-account transfer.
+
+    If account_suffixes is provided, also checks if the description references
+    one of the user's own accounts (by last 4 digits).
+    """
+    # Check explicit transfer patterns
     for pattern in TRANSFER_PATTERNS_COMPILED:
         if pattern.search(description):
             return True
+
+    # Check if it's a payment to one of user's own accounts
+    if account_suffixes:
+        suffix = extract_account_suffix_from_description(description)
+        if suffix and suffix in account_suffixes:
+            return True
+
     return False
 
 
@@ -568,7 +617,8 @@ def parse_chase_csv(content: str) -> list[dict]:
         except ValueError:
             continue
 
-        # Chase: negative = expense, positive = income/credit
+        # Chase: negative = expense/outflow, positive = income/inflow
+        is_inflow = amount > 0
         if is_likely_transfer(description):
             kind = "transfer"
         else:
@@ -588,6 +638,7 @@ def parse_chase_csv(content: str) -> list[dict]:
             "description": description,
             "amount": amount,
             "kind": kind,
+            "is_inflow": is_inflow,
             "import_hash": generate_import_hash(tx_date, amount, description, counter),
         })
 
@@ -617,7 +668,8 @@ def parse_bofa_csv(content: str) -> list[dict]:
         except ValueError:
             continue
 
-        # BOFA: negative = expense, positive = income/credit
+        # BOFA: negative = expense/outflow, positive = income/inflow
+        is_inflow = amount > 0
         if is_likely_transfer(description):
             kind = "transfer"
         else:
@@ -637,6 +689,7 @@ def parse_bofa_csv(content: str) -> list[dict]:
             "description": description,
             "amount": amount,
             "kind": kind,
+            "is_inflow": is_inflow,
             "import_hash": generate_import_hash(tx_date, amount, description, counter),
         })
 
@@ -756,6 +809,7 @@ def parse_excel_statement(content: bytes) -> tuple[list[dict], str]:
             amount = float(amount_val)
 
             # Determine kind
+            is_inflow = amount > 0
             if is_likely_transfer(description):
                 kind = "transfer"
             else:
@@ -775,6 +829,7 @@ def parse_excel_statement(content: bytes) -> tuple[list[dict], str]:
                 "description": description,
                 "amount": amount,
                 "kind": kind,
+                "is_inflow": is_inflow,
                 "import_hash": generate_import_hash(tx_date, amount, description, counter),
             })
         except Exception:
@@ -819,6 +874,9 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
     # Get categories for AI
     categories = get_category_list(db) if use_ai else []
 
+    # Get account suffixes for smart transfer detection
+    account_suffixes = get_account_suffixes(db)
+
     for tx in transactions:
         import_hash = tx["import_hash"]
 
@@ -834,16 +892,83 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
 
         batch_hashes.add(import_hash)
 
-        # Auto-categorize with rules (for both expense and income)
+        # Smart transfer detection: check if transaction references one of user's own accounts
+        tx_kind = tx["kind"]
+        is_inflow = tx.get("is_inflow", False)  # True if money coming IN to this account
         amount_cents = to_cents(tx["amount"])
-        category_id = None
 
+        suffix = extract_account_suffix_from_description(tx["description"])
+        if suffix and suffix in account_suffixes:
+            # This is a transfer between two accounts
+            other_account_id = get_account_by_suffix(db, suffix)
+
+            if is_inflow:
+                # Money coming in: other account is source, current account is destination
+                source_account_id = other_account_id
+                dest_account_id = account_id
+            else:
+                # Money going out: current account is source, other account is destination
+                source_account_id = account_id
+                dest_account_id = other_account_id
+
+            # Check for duplicate transfer (if transfer_out already exists for this transfer)
+            existing_transfer = db.scalars(
+                select(Transaction).where(
+                    Transaction.user_id == USER_ID,
+                    Transaction.kind == "transfer_out",
+                    Transaction.date == tx["date"],
+                    Transaction.amount_cents == amount_cents,
+                    Transaction.account_id == source_account_id,
+                    Transaction.to_account_id == dest_account_id
+                )
+            ).first()
+            if existing_transfer:
+                skipped += 1
+                continue
+
+            # Create TWO transactions for the transfer
+            # 1. transfer_out: deducts from source account
+            t_out = Transaction(
+                user_id=USER_ID,
+                date=tx["date"],
+                kind="transfer_out",
+                amount_cents=amount_cents,
+                account_id=source_account_id,
+                to_account_id=dest_account_id,
+                category_id=None,
+                merchant=tx["description"][:200],
+                note="",
+                is_business=False,
+                import_hash=tx["import_hash"],
+            )
+            db.add(t_out)
+
+            # 2. transfer_in: adds to destination account
+            t_in = Transaction(
+                user_id=USER_ID,
+                date=tx["date"],
+                kind="transfer_in",
+                amount_cents=amount_cents,
+                account_id=dest_account_id,
+                to_account_id=source_account_id,
+                category_id=None,
+                merchant=tx["description"][:200],
+                note="",
+                is_business=False,
+                import_hash=tx["import_hash"] + "_in",  # Unique hash for the second transaction
+            )
+            db.add(t_in)
+            imported += 2
+            continue
+
+        # Non-transfer transaction (expense or income)
+        category_id = None
         rule = categorize(db, tx["description"], amount_cents, account_id)
         category_id = rule.category_id if rule else None
 
         if rule:
             rule_categorized += 1
-        elif use_ai and tx["kind"] == "expense" and category_id is None:
+        elif use_ai and tx_kind == "expense" and category_id is None:
             # Try AI categorization (only for expenses)
             ai_cat_id = ai_categorize_single(tx["description"], categories)
             if ai_cat_id:
@@ -853,9 +978,10 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
         t = Transaction(
             user_id=USER_ID,
             date=tx["date"],
-            kind=tx["kind"],
+            kind=tx_kind,
             amount_cents=amount_cents,
             account_id=account_id,
+            to_account_id=None,
             category_id=category_id,
             merchant=tx["description"][:200],
             note="",

@@ -15,6 +15,7 @@ export default function Transactions({ month, categories, accounts }) {
   const [filters, setFilters] = useState({
     type: '',
     account: '',
+    toAccount: '',
     category: '',
     merchant: '',
     minAmount: '',
@@ -151,8 +152,16 @@ export default function Transactions({ month, categories, accounts }) {
 
   // Apply filters
   const filteredTransactions = transactions.filter(tx => {
-    if (filters.type && tx.kind !== filters.type) return false
+    if (filters.type) {
+      if (filters.type === 'transfer') {
+        // Match both transfer_out and transfer_in
+        if (tx.kind !== 'transfer_out' && tx.kind !== 'transfer_in') return false
+      } else if (tx.kind !== filters.type) {
+        return false
+      }
+    }
     if (filters.account && !tx.account?.toLowerCase().includes(filters.account.toLowerCase())) return false
+    if (filters.toAccount && !tx.to_account?.toLowerCase().includes(filters.toAccount.toLowerCase())) return false
     if (filters.category && !tx.category?.toLowerCase().includes(filters.category.toLowerCase())) return false
     if (filters.merchant && !tx.merchant?.toLowerCase().includes(filters.merchant.toLowerCase())) return false
     if (filters.minAmount && tx.amount < parseFloat(filters.minAmount)) return false
@@ -235,6 +244,41 @@ export default function Transactions({ month, categories, accounts }) {
   const totalExpense = sortedTransactions.filter(t => t.kind === 'expense').reduce((a, t) => a + t.amount, 0)
   const totalIncome = sortedTransactions.filter(t => t.kind === 'income').reduce((a, t) => a + t.amount, 0)
 
+  // Calculate running balance when viewing account transactions
+  const showBalance = !!accountId
+  const currentAccount = showBalance ? accounts.find(a => a.id === parseInt(accountId)) : null
+
+  // Calculate running balances (sorted by date ascending for calculation)
+  const transactionsWithBalance = (() => {
+    if (!showBalance || !currentAccount) return sortedTransactions.map(tx => ({ ...tx, balance: null, prevBalance: null }))
+
+    // Sort by date ascending, then by id ascending for same-day transactions
+    const sortedByDate = [...sortedTransactions].sort((a, b) => {
+      if (a.date < b.date) return -1
+      if (a.date > b.date) return 1
+      return a.id - b.id
+    })
+
+    let balance = currentAccount.opening || 0
+    const balanceMap = new Map()
+
+    for (const tx of sortedByDate) {
+      const prevBalance = balance
+      if (tx.kind === 'expense' || tx.kind === 'transfer_out') {
+        balance -= tx.amount
+      } else if (tx.kind === 'income' || tx.kind === 'transfer_in') {
+        balance += tx.amount
+      }
+      balanceMap.set(tx.id, { balance, prevBalance })
+    }
+
+    // Return in original sort order with balances
+    return sortedTransactions.map(tx => {
+      const balances = balanceMap.get(tx.id)
+      return { ...tx, balance: balances?.balance, prevBalance: balances?.prevBalance }
+    })
+  })()
+
   return (
     <div>
       {/* Month Navigation */}
@@ -294,7 +338,7 @@ export default function Transactions({ month, categories, accounts }) {
       ) : (
         <>
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-6">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm border-collapse [&_th]:border-r [&_th]:border-gray-200 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
               <thead className="bg-gray-50">
                 <tr className="border-b">
                   <th className="p-3 w-8">
@@ -308,7 +352,9 @@ export default function Transactions({ month, categories, accounts }) {
                   <SortHeader field="date" className="text-left">Date</SortHeader>
                   <SortHeader field="type" className="text-left">Type</SortHeader>
                   <SortHeader field="amount" className="text-right">Amount</SortHeader>
-                  <SortHeader field="account" className="text-left">Account</SortHeader>
+                  {showBalance && <th className="p-3 text-right">Balance</th>}
+                  <th className="p-3 text-left">From</th>
+                  <th className="p-3 text-left">To</th>
                   <SortHeader field="category" className="text-left">Category</SortHeader>
                   <SortHeader field="merchant" className="text-left">Merchant</SortHeader>
                 </tr>
@@ -324,7 +370,9 @@ export default function Transactions({ month, categories, accounts }) {
                       <option value="">All</option>
                       <option value="expense">Expense</option>
                       <option value="income">Income</option>
-                      <option value="transfer">Transfer</option>
+                      <option value="transfer">Transfer (all)</option>
+                      <option value="transfer_out">Transfer Out</option>
+                      <option value="transfer_in">Transfer In</option>
                     </select>
                   </td>
                   <td className="p-2">
@@ -345,12 +393,22 @@ export default function Transactions({ month, categories, accounts }) {
                       />
                     </div>
                   </td>
+                  {showBalance && <td className="p-2"></td>}
                   <td className="p-2">
                     <input
                       type="text"
                       placeholder="Filter..."
                       value={filters.account}
                       onChange={e => updateFilter('account', e.target.value)}
+                      className="w-full p-1 text-xs border rounded"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={filters.toAccount || ''}
+                      onChange={e => updateFilter('toAccount', e.target.value)}
                       className="w-full p-1 text-xs border rounded"
                     />
                   </td>
@@ -375,7 +433,7 @@ export default function Transactions({ month, categories, accounts }) {
                 </tr>
               </thead>
               <tbody>
-                {sortedTransactions.map(tx => (
+                {transactionsWithBalance.map(tx => (
                   <tr key={tx.id}
                     onClick={() => toggleSelect(tx.id)}
                     className={`border-b cursor-pointer hover:bg-gray-50 ${selectedTxIds.includes(tx.id) ? 'bg-blue-50' : ''}`}>
@@ -391,11 +449,20 @@ export default function Transactions({ month, categories, accounts }) {
                     <td className="p-3">{tx.date}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded text-xs ${
-                        tx.kind === 'expense' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-                      }`}>{tx.kind}</span>
+                        tx.kind === 'expense' ? 'bg-red-100 text-red-700' :
+                        tx.kind === 'transfer_out' ? 'bg-orange-100 text-orange-700' :
+                        tx.kind === 'transfer_in' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                      }`}>{tx.kind === 'transfer_out' ? 'transfer ↑' : tx.kind === 'transfer_in' ? 'transfer ↓' : tx.kind}</span>
                     </td>
                     <td className="p-3 text-right font-mono">{formatMoney(tx.amount)}</td>
-                    <td className="p-3">{tx.account}</td>
+                    {showBalance && (
+                      <td className="p-3 text-right font-mono">
+                        <div className={tx.balance < 0 ? 'text-red-600' : ''}>{formatMoney(tx.balance)}</div>
+                        <div className="text-xs text-gray-400">{formatMoney(tx.prevBalance)}</div>
+                      </td>
+                    )}
+                    <td className="p-3">{tx.account || <span className="text-gray-400">—</span>}</td>
+                    <td className="p-3">{tx.to_account || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3">{tx.category || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3 truncate max-w-[200px]">{tx.merchant}</td>
                   </tr>
