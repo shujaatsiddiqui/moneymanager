@@ -65,6 +65,8 @@ def accounts_summary(db: Session) -> dict:
             "include_in_totals": a.include_in_totals, "is_business": a.is_business,
             "opening": from_cents(a.opening_cents), "balance": from_cents(b),
             "account_suffix": a.account_suffix,
+            "last_import_at": a.last_import_at.isoformat() if a.last_import_at else None,
+            "last_tx_date": a.last_tx_date.isoformat() if a.last_tx_date else None,
         })
         if a.include_in_totals:
             if a.is_liability:
@@ -857,8 +859,13 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
     """Import parsed transactions into the database."""
     imported = 0
     skipped = 0
+    skipped_checkpoint = 0
     ai_categorized = 0
     rule_categorized = 0
+
+    # Get account and its checkpoint (last transaction date imported)
+    account = db.get(Account, account_id)
+    checkpoint = account.last_tx_date if account else None
 
     # Get existing import hashes to avoid duplicates
     existing_hashes = set(
@@ -877,7 +884,18 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
     # Get account suffixes for smart transfer detection
     account_suffixes = get_account_suffixes(db)
 
+    # Track latest transaction date for updating checkpoint
+    latest_date = None
+
     for tx in transactions:
+        # Skip transactions before checkpoint (same-day handled by import_hash)
+        if checkpoint and tx["date"] < checkpoint:
+            skipped_checkpoint += 1
+            continue
+
+        # Track latest date for updating checkpoint
+        if latest_date is None or tx["date"] > latest_date:
+            latest_date = tx["date"]
         import_hash = tx["import_hash"]
 
         # Skip if already in database
@@ -991,10 +1009,16 @@ def import_transactions(db: Session, transactions: list[dict], account_id: int, 
         db.add(t)
         imported += 1
 
+    # Update checkpoint if we imported any transactions
+    if imported > 0 and account and latest_date:
+        account.last_import_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        account.last_tx_date = latest_date
+
     db.commit()
     return {
         "imported": imported,
         "skipped": skipped,
+        "skipped_checkpoint": skipped_checkpoint,
         "rule_categorized": rule_categorized,
         "ai_categorized": ai_categorized,
     }

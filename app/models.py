@@ -28,6 +28,9 @@ class Account(Base):
     sort: Mapped[int] = mapped_column(Integer, default=0)
     # Last 4 digits of account number for auto-detection during import
     account_suffix: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # Checkpoint: when last import happened and latest transaction date imported
+    last_import_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_tx_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
     __table_args__ = (UniqueConstraint("user_id", "name"),)
 
 
