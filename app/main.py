@@ -539,9 +539,9 @@ def suggest(text: str, amount: Optional[float] = None, db: Session = Depends(get
 
 
 @app.get("/rules/suggest-pattern")
-def suggest_pattern(merchant: str):
-    """Use AI to suggest a good rule pattern for a merchant description."""
-    pattern = services.ai_suggest_rule_pattern(merchant)
+def suggest_pattern(description: str):
+    """Use AI to suggest a good rule pattern for a transaction description."""
+    pattern = services.ai_suggest_rule_pattern(description)
     return {"pattern": pattern}
 
 

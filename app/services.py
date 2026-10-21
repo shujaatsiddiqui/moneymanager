@@ -258,8 +258,8 @@ def get_category_list(db: Session) -> list[dict]:
     return result
 
 
-def ai_suggest_rule_pattern(merchant: str) -> Optional[str]:
-    """Use Ollama to suggest a good rule pattern for a merchant."""
+def ai_suggest_rule_pattern(description: str) -> Optional[str]:
+    """Use Ollama to suggest a good rule pattern for a transaction description."""
     prompt = f"""Extract the merchant/company name from this transaction description. Return ONLY the core merchant name that would match similar transactions.
 
 Examples:
@@ -270,7 +270,7 @@ Examples:
 - "INDIA METRO SUPERMARKET" → "INDIA METRO"
 - "Zelle payment to JOHN DOE" → "Zelle payment to"
 
-Transaction: "{merchant}"
+Transaction: "{description}"
 
 Return ONLY the pattern (no quotes, no explanation):"""
 
@@ -292,7 +292,7 @@ Return ONLY the pattern (no quotes, no explanation):"""
     # Fallback: extract first word(s) up to numbers/special sequences
     import re
     # Remove common suffixes like store numbers, transaction IDs
-    pattern = re.sub(r'[\s#*]+\d+.*$', '', merchant)
+    pattern = re.sub(r'[\s#*]+\d+.*$', '', description)
     pattern = re.sub(r'\s+(STORE|BRANCH|LOCATION).*$', '', pattern, flags=re.IGNORECASE)
     if pattern and len(pattern) >= 3:
         return pattern.strip()

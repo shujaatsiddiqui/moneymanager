@@ -70,7 +70,7 @@ def test_rule_auto_categorizes(client):
     client.post("/rules", json={"pattern": "shell", "category_id": fuel})
     chk = acct(client, "Chase Checking")["id"]
     r = client.post("/transactions", json={"date": "2026-10-08", "amount": 40, "account_id": chk,
-                                           "merchant": "SHELL OIL 5744"}).json()
+                                           "description": "SHELL OIL 5744"}).json()
     assert r["category_id"] == fuel and r["auto_categorized"] is True
     assert r["category"] == "Transport > Fuel"
 
@@ -81,9 +81,9 @@ def test_regex_rule_and_amount_filter(client):
                                 "min_amount": 5, "max_amount": 50})
     chk = acct(client, "Chase Checking")["id"]
     ok = client.post("/transactions", json={"date": "2026-10-09", "amount": 20, "account_id": chk,
-                                            "merchant": "OPENAI *CHATGPT SUBSCR"}).json()
+                                            "description": "OPENAI *CHATGPT SUBSCR"}).json()
     too_big = client.post("/transactions", json={"date": "2026-10-09", "amount": 200, "account_id": chk,
-                                                 "merchant": "OPENAI *CHATGPT SUBSCR"}).json()
+                                                 "description": "OPENAI *CHATGPT SUBSCR"}).json()
     assert ok["category_id"] == sub
     assert too_big["category_id"] is None
 
@@ -91,11 +91,11 @@ def test_regex_rule_and_amount_filter(client):
 def test_apply_rules_to_existing(client):
     chk = acct(client, "Chase Checking")["id"]
     client.post("/transactions", json={"date": "2026-10-10", "amount": 33, "account_id": chk,
-                                       "merchant": "x"})
+                                       "description": "x"})
     fuel = cat_id(client, "Transport", "Fuel")
     client.post("/rules", json={"pattern": "zzfuelzz", "category_id": fuel})
     client.post("/transactions", json={"date": "2026-10-10", "amount": 10, "account_id": chk,
-                                       "merchant": "plain"})
+                                       "description": "plain"})
     # nothing matches 'plain'; apply must not crash and returns a count
     assert client.post("/rules/apply").json()["categorized"] >= 0
 
