@@ -28,6 +28,14 @@ export default function Transactions({ month, categories, accounts }) {
   const showUnbudgeted = searchParams.get('unbudgeted') === 'true'
   const showUncategorized = searchParams.get('uncategorized') === 'true'
   const showExcluded = searchParams.get('excluded') === 'true'
+  const typeFilter = searchParams.get('type') // income, expense, transfer
+
+  // Set type filter from URL param on load
+  useEffect(() => {
+    if (typeFilter && typeFilter !== filters.type) {
+      setFilters(prev => ({ ...prev, type: typeFilter }))
+    }
+  }, [typeFilter])
 
   const loadTransactions = async () => {
     setLoading(true)
@@ -57,10 +65,12 @@ export default function Transactions({ month, categories, accounts }) {
     params.delete('unbudgeted')
     params.delete('uncategorized')
     params.delete('excluded')
+    params.delete('type')
     setSearchParams(params)
+    setFilters(prev => ({ ...prev, type: '' }))
   }
 
-  const hasSpecialFilter = categoryName || accountName || showUnbudgeted || showUncategorized || showExcluded
+  const hasSpecialFilter = categoryName || accountName || showUnbudgeted || showUncategorized || showExcluded || typeFilter
 
   const changeMonth = (direction) => {
     const [year, mon] = month.split('-').map(Number)
@@ -247,6 +257,9 @@ export default function Transactions({ month, categories, accounts }) {
           </select>
           {categoryName && <span className="text-xl text-gray-500">· {categoryName}</span>}
           {accountName && <span className="text-xl text-gray-500">· {accountName}</span>}
+          {typeFilter === 'income' && <span className="text-xl text-green-600">· Income</span>}
+          {typeFilter === 'expense' && <span className="text-xl text-red-500">· Expenses</span>}
+          {typeFilter === 'transfer' && <span className="text-xl text-blue-500">· Transfers</span>}
           {showUnbudgeted && <span className="text-xl text-orange-500">· Unbudgeted</span>}
           {showUncategorized && <span className="text-xl text-red-500">· Uncategorized</span>}
           {showExcluded && <span className="text-xl text-gray-500">· Excluded</span>}

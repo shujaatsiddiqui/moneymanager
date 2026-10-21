@@ -104,6 +104,20 @@ def budget_status(db: Session, month: str) -> dict:
         if c.parent_id:
             children[c.parent_id].append(c.id)
 
+    # Total income for the month
+    total_income_cents = db.scalar(
+        select(func.coalesce(func.sum(Transaction.amount_cents), 0))
+        .where(Transaction.user_id == USER_ID, Transaction.kind == "income",
+               Transaction.date >= start, Transaction.date < end)
+    ) or 0
+
+    # Total expenses for the month (all expenses, not just budgeted)
+    total_expenses_cents = db.scalar(
+        select(func.coalesce(func.sum(Transaction.amount_cents), 0))
+        .where(Transaction.user_id == USER_ID, Transaction.kind == "expense",
+               Transaction.date >= start, Transaction.date < end)
+    ) or 0
+
     spent_by_cat = dict(db.execute(
         select(Transaction.category_id, func.sum(Transaction.amount_cents))
         .where(Transaction.user_id == USER_ID, Transaction.kind == "expense",
@@ -140,6 +154,8 @@ def budget_status(db: Session, month: str) -> dict:
     excluded_total = sum(v for cid, v in spent_by_cat.items() if cid is not None and excluded(cid))
     total_limit = sum(b.limit_cents for b in budgets)
     total_spent = sum(to_cents(r["spent"]) for r in rows)
+    saved_cents = total_income_cents - total_expenses_cents
+    savings_rate = round((saved_cents / total_income_cents) * 100, 1) if total_income_cents > 0 else 0
     return {
         "month": month, "rows": rows,
         "total_limit": from_cents(total_limit), "total_spent": from_cents(total_spent),
@@ -147,6 +163,10 @@ def budget_status(db: Session, month: str) -> dict:
         "unbudgeted_spent": from_cents(unbudgeted),
         "uncategorized_spent": from_cents(uncategorized),
         "excluded_spent": from_cents(excluded_total),
+        "total_income": from_cents(total_income_cents),
+        "total_expenses": from_cents(total_expenses_cents),
+        "saved": from_cents(saved_cents),
+        "savings_rate": savings_rate,
     }
 
 
@@ -452,6 +472,15 @@ TRANSFER_PATTERNS = [
     r"ONLINE PAYMENT FROM CHK",
     r"PAYMENT FROM CHK",
     r"MOBILE PAYMENT.*TO ACCT",
+    r"AUTOMATIC PAYMENT.*THANK",
+    r"AUTOPAY PAYMENT.*THANK",
+    # Online transfers between accounts
+    r"Online Transfer from\s+CHK",
+    r"Online Transfer to\s+CHK",
+    r"Online Transfer from\s+SAV",
+    r"Online Transfer to\s+SAV",
+    r"Online Transfer from.*transaction",
+    r"Online Transfer to.*transaction",
     # ACH transfers
     r"ACH TRANSFER",
     r"INTERNAL TRANSFER",
@@ -459,6 +488,9 @@ TRANSFER_PATTERNS = [
     r"TRANSFER FROM.*SAVINGS",
     r"TRANSFER TO.*CHECKING",
     r"TRANSFER FROM.*CHECKING",
+    # Credit card payments (Chase)
+    r"ORIG CO NAME:CHASE CREDIT",
+    r"CHASE CREDIT CRD",
     # Zelle between own accounts (typically includes your name)
     # Note: Zelle to other people is NOT a transfer, so we don't include generic Zelle patterns
 ]
@@ -537,7 +569,10 @@ def parse_chase_csv(content: str) -> list[dict]:
             continue
 
         # Chase: negative = expense, positive = income/credit
-        kind = "expense" if amount < 0 else "income"
+        if is_likely_transfer(description):
+            kind = "transfer"
+        else:
+            kind = "expense" if amount < 0 else "income"
         amount = abs(amount)
 
         if amount == 0:
@@ -583,7 +618,10 @@ def parse_bofa_csv(content: str) -> list[dict]:
             continue
 
         # BOFA: negative = expense, positive = income/credit
-        kind = "expense" if amount < 0 else "income"
+        if is_likely_transfer(description):
+            kind = "transfer"
+        else:
+            kind = "expense" if amount < 0 else "income"
         amount = abs(amount)
 
         if amount == 0:
@@ -718,7 +756,10 @@ def parse_excel_statement(content: bytes) -> tuple[list[dict], str]:
             amount = float(amount_val)
 
             # Determine kind
-            kind = "expense" if amount < 0 else "income"
+            if is_likely_transfer(description):
+                kind = "transfer"
+            else:
+                kind = "expense" if amount < 0 else "income"
             amount = abs(amount)
 
             if amount == 0:

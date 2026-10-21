@@ -53,7 +53,37 @@ export default function Dashboard({ month }) {
         </button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Income vs Expenses Summary */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <button
+          onClick={() => navigate(`/transactions?month=${month}&type=income`)}
+          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-green-50 transition-colors"
+        >
+          <div className="text-sm text-gray-500">Income</div>
+          <div className="text-2xl font-bold text-green-600">{formatMoney(status.total_income)}</div>
+        </button>
+        <button
+          onClick={() => navigate(`/transactions?month=${month}&type=expense`)}
+          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-red-50 transition-colors"
+        >
+          <div className="text-sm text-gray-500">Expenses</div>
+          <div className="text-2xl font-bold text-red-600">{formatMoney(status.total_expenses)}</div>
+        </button>
+        <div className="bg-white p-4 rounded-xl shadow-sm border">
+          <div className="text-sm text-gray-500">Saved</div>
+          <div className={`text-2xl font-bold ${status.saved >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+            {formatMoney(status.saved)}
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border">
+          <div className="text-sm text-gray-500">Savings Rate</div>
+          <div className={`text-2xl font-bold ${status.savings_rate >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+            {status.savings_rate}%
+          </div>
+        </div>
+      </div>
+
+      {/* Budget Summary Cards */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white p-4 rounded-xl shadow-sm border">
           <div className="text-sm text-gray-500">Budgeted</div>

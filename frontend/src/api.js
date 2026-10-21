@@ -65,6 +65,7 @@ export const api = {
 }
 
 export function formatMoney(amount) {
+  if (amount == null || isNaN(amount)) return '$0.00'
   return amount >= 0
     ? `$${amount.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
     : `-$${Math.abs(amount).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`
