@@ -18,6 +18,7 @@ export default function Transactions({ month, categories, accounts }) {
     toAccount: '',
     category: '',
     merchant: '',
+    description: '',
     minAmount: '',
     maxAmount: '',
   })
@@ -164,6 +165,7 @@ export default function Transactions({ month, categories, accounts }) {
     if (filters.toAccount && !tx.to_account?.toLowerCase().includes(filters.toAccount.toLowerCase())) return false
     if (filters.category && !tx.category?.toLowerCase().includes(filters.category.toLowerCase())) return false
     if (filters.merchant && !tx.merchant?.toLowerCase().includes(filters.merchant.toLowerCase())) return false
+    if (filters.description && !tx.description?.toLowerCase().includes(filters.description.toLowerCase())) return false
     if (filters.minAmount && tx.amount < parseFloat(filters.minAmount)) return false
     if (filters.maxAmount && tx.amount > parseFloat(filters.maxAmount)) return false
     return true
@@ -357,6 +359,7 @@ export default function Transactions({ month, categories, accounts }) {
                   <th className="p-3 text-left">To</th>
                   <SortHeader field="category" className="text-left">Category</SortHeader>
                   <SortHeader field="merchant" className="text-left">Merchant</SortHeader>
+                  <th className="p-3 text-left">Description</th>
                 </tr>
                 <tr className="border-b bg-gray-50">
                   <td className="p-2"></td>
@@ -430,6 +433,15 @@ export default function Transactions({ month, categories, accounts }) {
                       className="w-full p-1 text-xs border rounded"
                     />
                   </td>
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      placeholder="Filter..."
+                      value={filters.description}
+                      onChange={e => updateFilter('description', e.target.value)}
+                      className="w-full p-1 text-xs border rounded"
+                    />
+                  </td>
                 </tr>
               </thead>
               <tbody>
@@ -465,6 +477,7 @@ export default function Transactions({ month, categories, accounts }) {
                     <td className="p-3">{tx.to_account || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3">{tx.category || <span className="text-gray-400">—</span>}</td>
                     <td className="p-3 truncate max-w-[200px]">{tx.merchant}</td>
+                    <td className="p-3 truncate max-w-[300px] text-gray-500 text-xs">{tx.description}</td>
                   </tr>
                 ))}
               </tbody>
