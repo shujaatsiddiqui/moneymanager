@@ -47,7 +47,6 @@ Thumbs.db
 .claude/
 
 # Database
-*.db
 *.sqlite
 *.sqlite3
 
