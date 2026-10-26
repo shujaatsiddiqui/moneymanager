@@ -20,6 +20,8 @@ class AccountPatch(BaseModel):
     include_in_totals: Optional[bool] = None
     is_business: Optional[bool] = None
     account_suffix: Optional[str] = None
+    due_day: Optional[int] = Field(default=None, ge=1, le=31)
+    statement_day: Optional[int] = Field(default=None, ge=1, le=31)
 
 
 class CategoryIn(BaseModel):

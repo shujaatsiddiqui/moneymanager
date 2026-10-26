@@ -7,6 +7,8 @@ export default function Accounts() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [suffixes, setSuffixes] = useState({})
+  const [dueDays, setDueDays] = useState({})
+  const [stmtDays, setStmtDays] = useState({})
   const [saving, setSaving] = useState(null)
 
   const viewTransactions = (account) => {
@@ -16,10 +18,18 @@ export default function Accounts() {
   const loadData = async () => {
     const result = await api.getAccounts()
     setData(result)
-    // Initialize local suffix state
+    // Initialize local state
     const s = {}
-    result.accounts.forEach(a => { s[a.id] = a.account_suffix || '' })
+    const d = {}
+    const st = {}
+    result.accounts.forEach(a => {
+      s[a.id] = a.account_suffix || ''
+      d[a.id] = a.due_day || ''
+      st[a.id] = a.statement_day || ''
+    })
     setSuffixes(s)
+    setDueDays(d)
+    setStmtDays(st)
     setLoading(false)
   }
 
@@ -46,6 +56,55 @@ export default function Accounts() {
     setSaving(null)
   }
 
+  const handleDueDayChange = (id, value) => {
+    // Only allow numbers 1-31 or empty
+    const num = parseInt(value, 10)
+    if (value === '' || (num >= 1 && num <= 31)) {
+      setDueDays(prev => ({ ...prev, [id]: value }))
+    }
+  }
+
+  const saveDueDay = async (id) => {
+    const account = data.accounts.find(a => a.id === id)
+    const original = account?.due_day || ''
+    const newValue = dueDays[id] || ''
+
+    if (String(newValue) === String(original)) return
+
+    setSaving(id)
+    try {
+      await api.updateAccount(id, { due_day: newValue ? parseInt(newValue, 10) : null })
+      await loadData()
+    } catch (e) {
+      alert('Failed to save: ' + e.message)
+    }
+    setSaving(null)
+  }
+
+  const handleStmtDayChange = (id, value) => {
+    const num = parseInt(value, 10)
+    if (value === '' || (num >= 1 && num <= 31)) {
+      setStmtDays(prev => ({ ...prev, [id]: value }))
+    }
+  }
+
+  const saveStmtDay = async (id) => {
+    const account = data.accounts.find(a => a.id === id)
+    const original = account?.statement_day || ''
+    const newValue = stmtDays[id] || ''
+
+    if (String(newValue) === String(original)) return
+
+    setSaving(id)
+    try {
+      await api.updateAccount(id, { statement_day: newValue ? parseInt(newValue, 10) : null })
+      await loadData()
+    } catch (e) {
+      alert('Failed to save: ' + e.message)
+    }
+    setSaving(null)
+  }
+
   if (loading) return <div>Loading...</div>
   if (!data) return <div className="text-red-500">Failed to load</div>
 
@@ -64,6 +123,8 @@ export default function Accounts() {
               <th className="text-left p-3">Group</th>
               <th className="text-left p-3">Account</th>
               <th className="text-left p-3">Suffix (last 4)</th>
+              <th className="text-left p-3">Stmt Day</th>
+              <th className="text-left p-3">Due Day</th>
               <th className="text-right p-3">Balance</th>
               <th className="text-right p-3">Opening</th>
               <th className="text-left p-3">Last Import</th>
@@ -96,6 +157,38 @@ export default function Accounts() {
                   />
                   {saving === a.id && <span className="ml-1 text-xs text-gray-500">saving...</span>}
                 </td>
+                <td className="p-3">
+                  {a.group === 'Card' ? (
+                    <input
+                      type="text"
+                      placeholder="1-31"
+                      value={stmtDays[a.id] || ''}
+                      onChange={e => handleStmtDayChange(a.id, e.target.value)}
+                      onBlur={() => saveStmtDay(a.id)}
+                      onKeyDown={e => e.key === 'Enter' && saveStmtDay(a.id)}
+                      disabled={saving === a.id}
+                      className={`w-14 px-2 py-1 border rounded text-sm text-center ${saving === a.id ? 'opacity-50' : ''}`}
+                    />
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </td>
+                <td className="p-3">
+                  {a.group === 'Card' ? (
+                    <input
+                      type="text"
+                      placeholder="1-31"
+                      value={dueDays[a.id] || ''}
+                      onChange={e => handleDueDayChange(a.id, e.target.value)}
+                      onBlur={() => saveDueDay(a.id)}
+                      onKeyDown={e => e.key === 'Enter' && saveDueDay(a.id)}
+                      disabled={saving === a.id}
+                      className={`w-14 px-2 py-1 border rounded text-sm text-center ${saving === a.id ? 'opacity-50' : ''}`}
+                    />
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </td>
                 <td className={`p-3 text-right font-mono ${a.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatMoney(a.balance)}</td>
                 <td className="p-3 text-right font-mono text-gray-500">{formatMoney(a.opening)}</td>
                 <td className="p-3 text-sm text-gray-500">
@@ -115,6 +208,8 @@ export default function Accounts() {
       </div>
       <p className="text-sm text-gray-500 mt-4">
         Type suffix and press Enter or click outside to save. Used for auto-detecting account during import.
+        <br />
+        Stmt Day: Day of month when statement is generated. Due Day: When payment is due. Both shown on Dashboard.
       </p>
     </div>
   )

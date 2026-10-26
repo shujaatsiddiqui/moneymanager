@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBudgetStatus } from '../api'
+import { getBudgetStatus, getCreditCardDues } from '../api'
 import { useMonth } from '../hooks'
 import { formatMoney } from '../utils'
 import { LoadingSpinner, StatCard, MonthSelector, ProgressBar } from '../components'
@@ -8,13 +8,20 @@ import { LoadingSpinner, StatCard, MonthSelector, ProgressBar } from '../compone
 export default function Dashboard() {
   const { month, setMonth, changeMonth, monthOptions } = useMonth(24)
   const [status, setStatus] = useState(null)
+  const [cardDues, setCardDues] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
     setLoading(true)
-    getBudgetStatus(month)
-      .then(setStatus)
+    Promise.all([
+      getBudgetStatus(month),
+      getCreditCardDues()
+    ])
+      .then(([budgetData, duesData]) => {
+        setStatus(budgetData)
+        setCardDues(duesData)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [month])
@@ -26,8 +33,63 @@ export default function Dashboard() {
   if (loading) return <LoadingSpinner />
   if (!status) return <div className="text-red-500">Failed to load</div>
 
+  // Helper functions for card dues
+  const getCardBgColor = (card) => {
+    if (!card.due_day) return 'bg-gray-100'
+    if (card.is_overdue || card.days_until_due <= 1) return 'bg-red-100'
+    if (card.days_until_due <= 3) return 'bg-orange-100'
+    return 'bg-emerald-200'
+  }
+
+  const getDueText = (card) => {
+    if (!card.due_day) return 'No due date'
+    if (card.is_overdue) return 'OVERDUE'
+    if (card.days_until_due === 0) return 'Due TODAY'
+    if (card.days_until_due === 1) return 'Tomorrow'
+    return `${card.days_until_due} days`
+  }
+
+  const getDueTextColor = (card) => {
+    if (!card.due_day) return 'text-gray-500'
+    if (card.is_overdue || card.days_until_due <= 1) return 'text-red-700'
+    if (card.days_until_due <= 3) return 'text-orange-700'
+    return 'text-green-700'
+  }
+
   return (
     <div>
+      {/* Credit Card Payments Due - Top Row */}
+      {cardDues.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center justify-center gap-4 overflow-x-auto pb-2">
+            {cardDues.map((card) => (
+              <div
+                key={card.id}
+                onClick={() => navigate(`/transactions?account=${card.id}&account_name=${encodeURIComponent(card.name)}`)}
+                className={`flex-shrink-0 rounded-xl shadow-sm border p-4 min-w-[200px] text-center cursor-pointer hover:opacity-80 transition-opacity ${getCardBgColor(card)}`}>
+                <div className="text-sm text-gray-600 truncate font-medium">{card.name}</div>
+                <div className={`text-xl font-bold ${card.balance < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  {formatMoney(Math.abs(card.balance))}
+                </div>
+                {card.statement_day && (
+                  <div className="text-xs text-gray-500">
+                    Stmt: {card.statement_day}th
+                  </div>
+                )}
+                <div className={`text-sm font-semibold ${getDueTextColor(card)}`}>
+                  {getDueText(card)}
+                  {card.next_due_date && (
+                    <span className="text-gray-500 font-normal ml-1">
+                      ({new Date(card.next_due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Month Navigation */}
       <MonthSelector
         month={month}
@@ -128,6 +190,7 @@ export default function Dashboard() {
           onClick={() => navigate(`/transactions?month=${month}&excluded=true`)}
         />
       </div>
+
     </div>
   )
 }

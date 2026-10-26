@@ -17,3 +17,11 @@ export function getAccounts() {
 export function updateAccount(id, data) {
   return request('PATCH', `/accounts/${id}`, data)
 }
+
+/**
+ * Get credit card due dates.
+ * @returns {Promise<Array>} Credit cards with due date info
+ */
+export function getCreditCardDues() {
+  return request('GET', '/accounts/credit-card-dues')
+}

@@ -24,6 +24,7 @@ class AccountPatch(BaseModel):
     include_in_totals: Optional[bool] = None
     is_business: Optional[bool] = None
     account_suffix: Optional[str] = None
+    due_day: Optional[int] = None  # Payment due day (1-31) for credit cards
 
 
 class AccountOut(BaseModel):
@@ -39,6 +40,7 @@ class AccountOut(BaseModel):
     account_suffix: Optional[str]
     last_import_at: Optional[datetime]
     last_tx_date: Optional[date]
+    due_day: Optional[int]
 
 
 class AccountsSummaryOut(BaseModel):
@@ -47,3 +49,14 @@ class AccountsSummaryOut(BaseModel):
     assets: Optional[float]
     liabilities: Optional[float]
     total: Optional[float]
+
+
+class CreditCardDueOut(BaseModel):
+    """Response schema for credit card due date info."""
+    id: int
+    name: str
+    balance: float
+    due_day: Optional[int]
+    next_due_date: Optional[str]
+    days_until_due: Optional[int]
+    is_overdue: bool = False

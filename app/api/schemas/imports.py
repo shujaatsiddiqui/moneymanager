@@ -24,6 +24,7 @@ class ImportResultOut(BaseModel):
     skipped_checkpoint: int = 0
     rule_categorized: int = 0
     ai_categorized: int = 0
+    batch_id: Optional[int] = None
     error: Optional[str] = None
 
 
@@ -49,3 +50,20 @@ class PreviewOut(BaseModel):
     detected_account_id: Optional[int]
     detected_account_name: Optional[str]
     transactions: list[PreviewTransactionOut]
+
+
+class ImportHistoryItem(BaseModel):
+    """A single import batch in history."""
+    id: int
+    account_id: int
+    account_name: str
+    filename: str
+    imported_at: str
+    transaction_count: int
+    reverted: bool
+
+
+class RevertImportOut(BaseModel):
+    """Response schema for reverting an import."""
+    batch_id: int
+    deleted_count: int

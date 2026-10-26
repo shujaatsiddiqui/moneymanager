@@ -50,6 +50,15 @@ class BaseParser(ABC):
         # Credit card payments (Chase)
         r"ORIG CO NAME:CHASE CREDIT",
         r"CHASE CREDIT CRD",
+        # Apple Card payments
+        r"APPLECARD.*PAYMENT",
+        r"APPLECARD GSBANK",
+        # Amazon card payments
+        r"AMAZON.*PAYMENT",
+        r"SYNCB/AMAZON",
+        # Generic card payment patterns
+        r"DES:PAYMENT.*GSBANK",
+        r"DES:PAYMENT.*CARD",
     ]
 
     TRANSFER_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in TRANSFER_PATTERNS]

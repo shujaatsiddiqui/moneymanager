@@ -10,8 +10,16 @@ export default function Import({ accounts }) {
   const [aiAvail, setAiAvail] = useState(false)
   const [importing, setImporting] = useState(false)
   const [results, setResults] = useState(null)
+  const [history, setHistory] = useState([])
+  const [reverting, setReverting] = useState(null)
 
   useEffect(() => { api.getAiStatus().then(d => setAiAvail(d.available)).catch(() => {}) }, [])
+
+  const loadHistory = () => {
+    api.getImportHistory(20).then(setHistory).catch(console.error)
+  }
+
+  useEffect(() => { loadHistory() }, [])
 
   const handleFiles = async e => {
     const selectedFiles = Array.from(e.target.files)
@@ -57,10 +65,25 @@ export default function Import({ accounts }) {
       setFiles([])
       setPreviews([])
       setManualAccounts({})
+      loadHistory()
     } catch (e) {
       alert('Failed: ' + e.message)
     } finally {
       setImporting(false)
+    }
+  }
+
+  const handleRevert = async (batchId) => {
+    if (!confirm('Are you sure you want to undo this import? All transactions from this import will be deleted.')) return
+    setReverting(batchId)
+    try {
+      const result = await api.revertImport(batchId)
+      alert(`Reverted: ${result.deleted_count} transactions deleted`)
+      loadHistory()
+    } catch (e) {
+      alert('Failed to revert: ' + e.message)
+    } finally {
+      setReverting(null)
     }
   }
 
@@ -226,6 +249,52 @@ export default function Import({ accounts }) {
           <p className="text-orange-600 text-sm mt-2">Select an account for each file to enable import</p>
         )}
       </div>
+
+      {/* Import History */}
+      {history.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4">Import History</h2>
+          <div className="bg-white rounded-xl shadow-sm border">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="p-3 text-left text-sm font-medium text-gray-600">Date</th>
+                  <th className="p-3 text-left text-sm font-medium text-gray-600">File</th>
+                  <th className="p-3 text-left text-sm font-medium text-gray-600">Account</th>
+                  <th className="p-3 text-right text-sm font-medium text-gray-600">Transactions</th>
+                  <th className="p-3 text-center text-sm font-medium text-gray-600">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map(h => (
+                  <tr key={h.id} className={`border-t ${h.reverted ? 'opacity-50' : ''}`}>
+                    <td className="p-3 text-sm">
+                      {new Date(h.imported_at).toLocaleDateString()}{' '}
+                      <span className="text-gray-400">{new Date(h.imported_at).toLocaleTimeString()}</span>
+                    </td>
+                    <td className="p-3 text-sm">{h.filename}</td>
+                    <td className="p-3 text-sm">{h.account_name}</td>
+                    <td className="p-3 text-sm text-right">{h.transaction_count}</td>
+                    <td className="p-3 text-center">
+                      {h.reverted ? (
+                        <span className="text-gray-400 text-sm">Reverted</span>
+                      ) : (
+                        <button
+                          onClick={() => handleRevert(h.id)}
+                          disabled={reverting === h.id}
+                          className="text-red-600 hover:text-red-800 text-sm disabled:opacity-50"
+                        >
+                          {reverting === h.id ? 'Reverting...' : 'Undo'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

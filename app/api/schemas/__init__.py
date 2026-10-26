@@ -7,7 +7,7 @@ from .category import (
 from .budget import BudgetIn, BudgetStatusOut, BudgetRowOut, CopyBudgetsOut
 from .transaction import TransactionIn, TransactionPatch, TransactionOut, DetectTransfersOut
 from .rule import RuleIn, RuleOut, SuggestOut, SuggestPatternOut, ApplyRulesOut
-from .imports import AIStatusOut, ImportResultOut, MultiImportOut, PreviewOut
+from .imports import AIStatusOut, ImportResultOut, MultiImportOut, PreviewOut, ImportHistoryItem, RevertImportOut
 from .report import ProfitLossOut
 from .common import OkResponse, IdResponse
 
@@ -24,7 +24,7 @@ __all__ = [
     # Rule
     "RuleIn", "RuleOut", "SuggestOut", "SuggestPatternOut", "ApplyRulesOut",
     # Import
-    "AIStatusOut", "ImportResultOut", "MultiImportOut", "PreviewOut",
+    "AIStatusOut", "ImportResultOut", "MultiImportOut", "PreviewOut", "ImportHistoryItem", "RevertImportOut",
     # Report
     "ProfitLossOut",
     # Common

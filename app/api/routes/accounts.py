@@ -50,3 +50,9 @@ def update_account(
         return OkResponse()
     except DomainException as e:
         raise handle_domain_exception(e)
+
+
+@router.get("/credit-card-dues")
+def get_credit_card_dues(service: AccountService = Depends(get_account_service)):
+    """Get credit card accounts with due date information."""
+    return service.get_credit_card_dues()

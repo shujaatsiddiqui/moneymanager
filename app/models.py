@@ -31,6 +31,10 @@ class Account(Base):
     # Checkpoint: when last import happened and latest transaction date imported
     last_import_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_tx_date: Mapped[Optional[date_type]] = mapped_column(Date, nullable=True)
+    # Payment due day (1-31) for credit cards
+    due_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Statement generation day (1-31) for credit cards
+    statement_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     __table_args__ = (UniqueConstraint("user_id", "name"),)
 
 
@@ -57,6 +61,18 @@ class Budget(Base):
     __table_args__ = (UniqueConstraint("user_id", "category_id", "month"),)
 
 
+class ImportBatch(Base):
+    """Tracks each import operation for rollback capability."""
+    __tablename__ = "import_batches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, default=USER_ID, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"))
+    filename: Mapped[str] = mapped_column(String(255))
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    transaction_count: Mapped[int] = mapped_column(Integer, default=0)
+    reverted: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -72,6 +88,7 @@ class Transaction(Base):
     is_business: Mapped[bool] = mapped_column(Boolean, default=False)
     # Reserved for bank imports later (duplicate detection).
     import_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    import_batch_id: Mapped[Optional[int]] = mapped_column(ForeignKey("import_batches.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     __table_args__ = (UniqueConstraint("user_id", "import_hash"),)
 

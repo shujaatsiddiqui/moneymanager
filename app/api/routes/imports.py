@@ -79,7 +79,9 @@ async def import_statement(
 
         # Import transactions
         try:
-            result = service.import_transactions(transactions, target_account_id, use_ai=use_ai)
+            result = service.import_transactions(
+                transactions, target_account_id, use_ai=use_ai, filename=filename
+            )
             result["filename"] = filename
             result["format"] = bank_format
             result["total_in_file"] = len(transactions)
@@ -112,3 +114,24 @@ async def preview_import(
 
     result = service.preview(content, filename)
     return PreviewOut(**result)
+
+
+@router.get("/history")
+def import_history(
+    limit: int = 50,
+    service: ImportService = Depends(get_import_service),
+):
+    """Get list of past imports."""
+    return service.get_import_history(limit=limit)
+
+
+@router.delete("/{batch_id}")
+def revert_import(
+    batch_id: int,
+    service: ImportService = Depends(get_import_service),
+):
+    """Revert an import by deleting all its transactions."""
+    try:
+        return service.revert_import(batch_id)
+    except DomainException as e:
+        raise handle_domain_exception(e)

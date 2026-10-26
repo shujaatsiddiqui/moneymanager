@@ -37,3 +37,21 @@ export async function previewImport(file) {
   formData.append('file', file)
   return uploadRequest('/import/preview', formData)
 }
+
+/**
+ * Get import history.
+ * @param {number} limit - Max number of records to return
+ * @returns {Promise<Array>}
+ */
+export function getImportHistory(limit = 50) {
+  return request('GET', `/import/history?limit=${limit}`)
+}
+
+/**
+ * Revert an import batch (delete all its transactions).
+ * @param {number} batchId - Import batch ID to revert
+ * @returns {Promise<{batch_id: number, deleted_count: number}>}
+ */
+export function revertImport(batchId) {
+  return request('DELETE', `/import/${batchId}`)
+}

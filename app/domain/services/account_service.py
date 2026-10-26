@@ -48,6 +48,8 @@ class AccountService:
                 "account_suffix": a.account_suffix,
                 "last_import_at": a.last_import_at.isoformat() if a.last_import_at else None,
                 "last_tx_date": a.last_tx_date.isoformat() if a.last_tx_date else None,
+                "due_day": a.due_day,
+                "statement_day": a.statement_day,
             })
 
             if a.include_in_totals:
@@ -106,6 +108,8 @@ class AccountService:
         include_in_totals: Optional[bool] = None,
         is_business: Optional[bool] = None,
         account_suffix: Optional[str] = None,
+        due_day: Optional[int] = None,
+        statement_day: Optional[int] = None,
     ) -> None:
         """Update an account."""
         account = self.get(account_id)
@@ -120,8 +124,77 @@ class AccountService:
             account.is_business = is_business
         if account_suffix is not None:
             account.account_suffix = account_suffix
+        if due_day is not None:
+            account.due_day = due_day
+        if statement_day is not None:
+            account.statement_day = statement_day
 
         self.repo.commit()
+
+    def get_credit_card_dues(self) -> list[dict]:
+        """Get credit card accounts with due date info."""
+        from datetime import date, timedelta
+
+        balances = self.repo.calculate_balances()
+        accounts = self.repo.get_all_ordered()
+
+        today = date.today()
+        result = []
+
+        for a in accounts:
+            # Only include credit cards (liabilities in Card group)
+            if not a.is_liability or a.group_name != "Card":
+                continue
+
+            balance = balances.get(a.id, 0)
+
+            # Calculate next due date and days until due
+            next_due_date = None
+            days_until_due = None
+            is_overdue = False
+
+            if a.due_day:
+                # Calculate next due date
+                year = today.year
+                month = today.month
+
+                # Handle months with fewer days
+                import calendar
+                last_day = calendar.monthrange(year, month)[1]
+                due_day = min(a.due_day, last_day)
+
+                next_due = date(year, month, due_day)
+
+                # If already past this month's due date, use next month
+                if next_due < today:
+                    if month == 12:
+                        month = 1
+                        year += 1
+                    else:
+                        month += 1
+                    last_day = calendar.monthrange(year, month)[1]
+                    due_day = min(a.due_day, last_day)
+                    next_due = date(year, month, due_day)
+
+                next_due_date = next_due.isoformat()
+                days_until_due = (next_due - today).days
+                is_overdue = days_until_due < 0
+
+            result.append({
+                "id": a.id,
+                "name": a.name,
+                "balance": from_cents(balance),
+                "due_day": a.due_day,
+                "statement_day": a.statement_day,
+                "next_due_date": next_due_date,
+                "days_until_due": days_until_due,
+                "is_overdue": is_overdue,
+            })
+
+        # Sort by days_until_due (None at end)
+        result.sort(key=lambda x: (x["days_until_due"] is None, x["days_until_due"] or 0))
+
+        return result
 
     def get_by_suffix(self, suffix: str) -> Optional[Account]:
         """Get account by suffix."""

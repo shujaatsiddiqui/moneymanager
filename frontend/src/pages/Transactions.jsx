@@ -264,9 +264,11 @@ export default function Transactions({ month, categories, accounts }) {
 
     for (const tx of sortedByDate) {
       const prevBalance = balance
-      if (tx.kind === 'expense' || tx.kind === 'transfer_out') {
+      if (tx.kind === 'expense' || tx.kind === 'transfer_out' || tx.kind === 'transfer') {
+        // expense, transfer_out, and orphaned transfers reduce balance
         balance -= tx.amount
-      } else if (tx.kind === 'income' || tx.kind === 'transfer_in') {
+      } else if (tx.kind === 'income' || tx.kind === 'transfer_in' || tx.kind === 'refund') {
+        // income, transfer_in, and refunds increase balance
         balance += tx.amount
       }
       balanceMap.set(tx.id, { balance, prevBalance })
