@@ -18,6 +18,15 @@ export default function Budgets({ month, categories }) {
 
   const budgetable = categories.filter(c => !c.exclude_from_budget)
 
+  // Group categories: parents first, then their children indented
+  const parents = budgetable.filter(c => !c.parent_id)
+  const children = budgetable.filter(c => c.parent_id)
+  const sortedCategories = []
+  parents.forEach(p => {
+    sortedCategories.push(p)
+    children.filter(c => c.parent_id === p.id).forEach(c => sortedCategories.push(c))
+  })
+
   const handleSave = async () => {
     const orig = {}; status.rows.forEach(r => orig[r.category_id] = r.limit)
     for (const c of budgetable) {
@@ -48,8 +57,12 @@ export default function Budgets({ month, categories }) {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b"><tr><th className="text-left p-3">Category</th><th className="text-right p-3">Limit</th></tr></thead>
           <tbody>
-            {budgetable.map(c => (
-              <tr key={c.id} className="border-b"><td className="p-3">{c.emoji} {c.name}</td>
+            {sortedCategories.map(c => (
+              <tr key={c.id} className={`border-b ${c.parent_id ? 'bg-gray-50' : ''}`}>
+                <td className="p-3">
+                  {c.parent_id && <span className="text-gray-300 mr-2">└</span>}
+                  {c.emoji} {c.name}
+                </td>
                 <td className="p-3 text-right">
                   <input type="number" step="10" min="0" value={limits[c.id] || ''} onChange={e => setLimits({...limits, [c.id]: parseFloat(e.target.value) || 0})}
                     className="w-32 p-2 border rounded-lg text-right" placeholder="$0"/>
