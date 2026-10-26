@@ -26,6 +26,7 @@ class TransactionRepository(BaseRepository[Transaction]):
         kinds: Optional[list[str]] = None,
         uncategorized: bool = False,
         exclude_category_ids: Optional[list[int]] = None,
+        is_business: Optional[bool] = None,
         limit: int = 500,
     ) -> list[Transaction]:
         """Get transactions with various filters."""
@@ -47,6 +48,8 @@ class TransactionRepository(BaseRepository[Transaction]):
             q = q.where(Transaction.category_id.is_(None))
         if exclude_category_ids:
             q = q.where(Transaction.category_id.notin_(exclude_category_ids))
+        if is_business is not None:
+            q = q.where(Transaction.is_business == is_business)
 
         q = q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit)
         return list(self.db.scalars(q).all())
@@ -155,3 +158,62 @@ class TransactionRepository(BaseRepository[Transaction]):
             tx.category_id = to_category_id
             count += 1
         return count
+
+    def get_totals_by_kind_and_category(
+        self,
+        start_date: date,
+        end_date: date,
+        is_business: Optional[bool] = None
+    ) -> dict[tuple[str, Optional[int]], int]:
+        """Get total amounts grouped by kind and category for a date range.
+
+        Returns dict mapping (kind, category_id) -> total_cents
+        """
+        q = (
+            select(
+                Transaction.kind,
+                Transaction.category_id,
+                func.sum(Transaction.amount_cents)
+            )
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.date >= start_date,
+                Transaction.date < end_date
+            )
+            .group_by(Transaction.kind, Transaction.category_id)
+        )
+
+        if is_business is not None:
+            q = q.where(Transaction.is_business == is_business)
+
+        rows = self.db.execute(q).all()
+        return {(kind, cat_id): total for kind, cat_id, total in rows}
+
+    def get_totals_by_kind(
+        self,
+        start_date: date,
+        end_date: date,
+        is_business: Optional[bool] = None
+    ) -> dict[str, int]:
+        """Get total amounts grouped by kind for a date range.
+
+        Returns dict mapping kind -> total_cents
+        """
+        q = (
+            select(
+                Transaction.kind,
+                func.sum(Transaction.amount_cents)
+            )
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.date >= start_date,
+                Transaction.date < end_date
+            )
+            .group_by(Transaction.kind)
+        )
+
+        if is_business is not None:
+            q = q.where(Transaction.is_business == is_business)
+
+        rows = self.db.execute(q).all()
+        return {kind: total for kind, total in rows}

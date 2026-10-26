@@ -78,7 +78,7 @@ class AccountRepository(BaseRepository[Account]):
         for acc_id, kind, total in rows:
             if kind in ("expense", "transfer_out"):
                 balances[acc_id] -= total
-            elif kind in ("income", "transfer_in"):
+            elif kind in ("income", "transfer_in", "refund"):
                 balances[acc_id] += total
 
         return balances

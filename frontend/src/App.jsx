@@ -8,9 +8,11 @@ import Import from './pages/Import'
 import Rules from './pages/Rules'
 import Accounts from './pages/Accounts'
 import Categories from './pages/Categories'
+import ProfitLoss from './pages/ProfitLoss'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: '📊' },
+  { path: '/profit-loss', label: 'P&L', icon: '📈' },
   { path: '/add', label: 'Add Transaction', icon: '➕' },
   { path: '/transactions', label: 'Transactions', icon: '📜' },
   { path: '/budgets', label: 'Budgets', icon: '💰' },
@@ -55,6 +57,7 @@ export default function App() {
       <main className="flex-1 p-6 overflow-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/profit-loss" element={<ProfitLoss />} />
           <Route path="/add" element={<AddTransaction categories={categories} accounts={accounts} />} />
           <Route path="/transactions" element={<Transactions month={month} categories={categories} accounts={accounts} />} />
           <Route path="/budgets" element={<Budgets month={month} categories={categories} />} />

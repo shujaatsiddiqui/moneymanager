@@ -94,8 +94,8 @@ class TransactionService:
         if cat_id is not None:
             if self.category_repo.get(cat_id) is None:
                 raise NotFoundError("Category", cat_id)
-        elif kind == "expense":
-            # Auto-categorize expenses
+        elif kind in ("expense", "refund"):
+            # Auto-categorize expenses and refunds
             rule = self.rule_repo.match(f"{description} {note}", cents, account_id)
             if rule:
                 cat_id = rule.category_id
@@ -188,6 +188,7 @@ class TransactionService:
         uncategorized: bool = False,
         unbudgeted: bool = False,
         excluded: bool = False,
+        is_business: Optional[bool] = None,
         limit: int = 500,
         budgeted_ids: Optional[set[int]] = None,
         excluded_ids: Optional[set[int]] = None,
@@ -224,6 +225,7 @@ class TransactionService:
             category_ids=category_ids,
             kinds=kinds,
             uncategorized=uncategorized,
+            is_business=is_business,
             limit=limit,
         )
 

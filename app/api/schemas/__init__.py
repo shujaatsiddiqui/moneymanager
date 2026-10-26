@@ -8,6 +8,7 @@ from .budget import BudgetIn, BudgetStatusOut, BudgetRowOut, CopyBudgetsOut
 from .transaction import TransactionIn, TransactionPatch, TransactionOut, DetectTransfersOut
 from .rule import RuleIn, RuleOut, SuggestOut, SuggestPatternOut, ApplyRulesOut
 from .imports import AIStatusOut, ImportResultOut, MultiImportOut, PreviewOut
+from .report import ProfitLossOut
 from .common import OkResponse, IdResponse
 
 __all__ = [
@@ -24,6 +25,8 @@ __all__ = [
     "RuleIn", "RuleOut", "SuggestOut", "SuggestPatternOut", "ApplyRulesOut",
     # Import
     "AIStatusOut", "ImportResultOut", "MultiImportOut", "PreviewOut",
+    # Report
+    "ProfitLossOut",
     # Common
     "OkResponse", "IdResponse",
 ]

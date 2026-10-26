@@ -154,7 +154,7 @@ class ImportService:
                 category_id=category_id,
                 description=tx.description[:500],
                 note="",
-                is_business=False,
+                is_business=account.is_business,
                 import_hash=tx.import_hash,
             )
             self.transaction_repo.add(t)
@@ -183,6 +183,12 @@ class ImportService:
         amount_cents: int,
     ) -> None:
         """Create a pair of transfer transactions."""
+        # Get account business flags
+        source_account = self.account_repo.get(source_account_id)
+        dest_account = self.account_repo.get(dest_account_id)
+        source_is_business = source_account.is_business if source_account else False
+        dest_is_business = dest_account.is_business if dest_account else False
+
         # transfer_out: deducts from source
         t_out = Transaction(
             user_id=USER_ID,
@@ -194,7 +200,7 @@ class ImportService:
             category_id=None,
             description=tx.description[:500],
             note="",
-            is_business=False,
+            is_business=source_is_business,
             import_hash=tx.import_hash,
         )
         self.transaction_repo.add(t_out)
@@ -210,7 +216,7 @@ class ImportService:
             category_id=None,
             description=tx.description[:500],
             note="",
-            is_business=False,
+            is_business=dest_is_business,
             import_hash=tx.import_hash + "_in",
         )
         self.transaction_repo.add(t_in)

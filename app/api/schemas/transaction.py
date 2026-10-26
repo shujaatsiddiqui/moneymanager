@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 class TransactionIn(BaseModel):
     """Request schema for creating a transaction."""
     date: Date
-    kind: Literal["expense", "income", "transfer"] = "expense"
+    kind: Literal["expense", "income", "refund", "transfer"] = "expense"
     amount: float = Field(gt=0)
     account_id: int
     to_account_id: Optional[int] = None  # transfers only
@@ -22,7 +22,7 @@ class TransactionIn(BaseModel):
 class TransactionPatch(BaseModel):
     """Request schema for updating a transaction."""
     date: Optional[Date] = None
-    kind: Optional[Literal["expense", "income", "transfer"]] = None
+    kind: Optional[Literal["expense", "income", "refund", "transfer"]] = None
     amount: Optional[float] = Field(default=None, gt=0)
     category_id: Optional[int] = None
     to_account_id: Optional[int] = None  # For transfers

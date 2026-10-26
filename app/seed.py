@@ -22,6 +22,9 @@ ACCOUNTS = [
 
 # (emoji, name, [subcategories], exclude_from_budget)
 CATEGORIES = [
+    # Income categories for P&L reporting
+    ("💰", "Income", ["Salary", "Bonus", "Interest/Dividends", "Freelance", "Gifts", "Other Income"], False),
+    # Expense categories
     ("🍜", "Food & Outing", ["Lunch", "Dinner", "Eating out", "Beverages"], False),
     ("👫", "Social Life", ["Friend", "Fellowship", "Alumni", "Dues"], False),
     ("🐶", "Pets", [], False),

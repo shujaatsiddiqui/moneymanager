@@ -19,6 +19,7 @@ from ..domain.services import (
     TransactionService,
     RuleService,
     ImportService,
+    ReportService,
 )
 
 
@@ -50,6 +51,11 @@ def get_rule_service(db: Session = Depends(get_db)) -> RuleService:
 def get_import_service(db: Session = Depends(get_db)) -> ImportService:
     """Get ImportService instance."""
     return ImportService(db)
+
+
+def get_report_service(db: Session = Depends(get_db)) -> ReportService:
+    """Get ReportService instance."""
+    return ReportService(db)
 
 
 def handle_domain_exception(exc: DomainException) -> HTTPException:

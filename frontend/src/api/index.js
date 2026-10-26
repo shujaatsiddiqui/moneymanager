@@ -50,6 +50,12 @@ export {
   previewImport,
 } from './imports'
 
+// Reports
+export {
+  getProfitLoss,
+  getYtdProfitLoss,
+} from './reports'
+
 // Legacy compatibility - single api object
 // TODO: Remove after all pages are migrated
 import * as accounts from './accounts'
@@ -58,6 +64,7 @@ import * as budgets from './budgets'
 import * as transactions from './transactions'
 import * as rules from './rules'
 import * as imports from './imports'
+import * as reports from './reports'
 
 export const api = {
   ...accounts,
@@ -66,4 +73,5 @@ export const api = {
   ...transactions,
   ...rules,
   ...imports,
+  ...reports,
 }
