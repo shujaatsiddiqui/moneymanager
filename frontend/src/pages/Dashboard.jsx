@@ -1,104 +1,79 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, formatMoney, getMonthOptions } from '../api'
+import { useNavigate } from 'react-router-dom'
+import { getBudgetStatus } from '../api'
+import { useMonth } from '../hooks'
+import { formatMoney } from '../utils'
+import { LoadingSpinner, StatCard, MonthSelector, ProgressBar } from '../components'
 
-export default function Dashboard({ month }) {
+export default function Dashboard() {
+  const { month, setMonth, changeMonth, monthOptions } = useMonth(24)
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
     setLoading(true)
-    api.getBudgetStatus(month).then(setStatus).catch(console.error).finally(() => setLoading(false))
+    getBudgetStatus(month)
+      .then(setStatus)
+      .catch(console.error)
+      .finally(() => setLoading(false))
   }, [month])
 
   const handleCategoryClick = (categoryId, categoryName) => {
     navigate(`/transactions?month=${month}&category=${categoryId}&category_name=${encodeURIComponent(categoryName)}`)
   }
 
-  const changeMonth = (direction) => {
-    const [year, mon] = month.split('-').map(Number)
-    let newYear = year, newMonth = mon + direction
-    if (newMonth > 12) { newYear++; newMonth = 1 }
-    if (newMonth < 1) { newYear--; newMonth = 12 }
-    const newMonthStr = `${newYear}-${String(newMonth).padStart(2, '0')}`
-    setSearchParams({ month: newMonthStr })
-  }
-
-  const monthOptions = getMonthOptions(24)
-
-  if (loading) return <div className="text-gray-500">Loading...</div>
+  if (loading) return <LoadingSpinner />
   if (!status) return <div className="text-red-500">Failed to load</div>
 
   return (
     <div>
       {/* Month Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={() => changeMonth(-1)} className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
-          ← Prev
-        </button>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-800">Budget</h1>
-          <select
-            value={month}
-            onChange={(e) => setSearchParams({ month: e.target.value })}
-            className="text-2xl font-bold text-blue-600 bg-transparent border-none cursor-pointer"
-          >
-            {monthOptions.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-        <button onClick={() => changeMonth(1)} className="px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200">
-          Next →
-        </button>
-      </div>
+      <MonthSelector
+        month={month}
+        monthOptions={monthOptions}
+        onMonthChange={setMonth}
+        onPrev={() => changeMonth(-1)}
+        onNext={() => changeMonth(1)}
+        title="Budget"
+        className="mb-6"
+      />
 
       {/* Income vs Expenses Summary */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <button
+        <StatCard
+          label="Income"
+          value={formatMoney(status.total_income)}
+          color="green"
           onClick={() => navigate(`/transactions?month=${month}&type=income`)}
-          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-green-50 transition-colors"
-        >
-          <div className="text-sm text-gray-500">Income</div>
-          <div className="text-2xl font-bold text-green-600">{formatMoney(status.total_income)}</div>
-        </button>
-        <button
+        />
+        <StatCard
+          label="Expenses"
+          value={formatMoney(status.total_expenses)}
+          color="red"
           onClick={() => navigate(`/transactions?month=${month}&type=expense`)}
-          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-red-50 transition-colors"
-        >
-          <div className="text-sm text-gray-500">Expenses</div>
-          <div className="text-2xl font-bold text-red-600">{formatMoney(status.total_expenses)}</div>
-        </button>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-sm text-gray-500">Saved</div>
-          <div className={`text-2xl font-bold ${status.saved >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-            {formatMoney(status.saved)}
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-sm text-gray-500">Savings Rate</div>
-          <div className={`text-2xl font-bold ${status.savings_rate >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-            {status.savings_rate}%
-          </div>
-        </div>
+        />
+        <StatCard
+          label="Saved"
+          value={formatMoney(status.saved)}
+          color={status.saved >= 0 ? 'blue' : 'red'}
+        />
+        <StatCard
+          label="Savings Rate"
+          value={`${status.savings_rate}%`}
+          color={status.savings_rate >= 0 ? 'blue' : 'red'}
+        />
       </div>
 
       {/* Budget Summary Cards */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-sm text-gray-500">Budgeted</div>
-          <div className="text-2xl font-bold">{formatMoney(status.total_limit)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-sm text-gray-500">Spent</div>
-          <div className="text-2xl font-bold">{formatMoney(status.total_spent)}</div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border">
-          <div className="text-sm text-gray-500">Left</div>
-          <div className={`text-2xl font-bold ${status.total_left >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatMoney(status.total_left)}
-          </div>
-        </div>
+        <StatCard label="Budgeted" value={formatMoney(status.total_limit)} />
+        <StatCard label="Spent" value={formatMoney(status.total_spent)} />
+        <StatCard
+          label="Left"
+          value={formatMoney(status.total_left)}
+          color={status.total_left >= 0 ? 'green' : 'red'}
+        />
       </div>
 
       {/* Budget Categories */}
@@ -107,13 +82,14 @@ export default function Dashboard({ month }) {
       ) : (
         <div className="bg-white rounded-xl shadow-sm border">
           {status.rows.map((r) => {
-            const pct = r.limit ? Math.min((r.spent / r.limit) * 100, 100) : 100
             const over = r.left < 0
             return (
               <div key={r.category_id} className="p-4 border-b last:border-b-0 hover:bg-gray-50">
                 <div className="flex items-center justify-between mb-2">
-                  <button onClick={() => handleCategoryClick(r.category_id, r.category)}
-                    className="text-left font-medium hover:text-blue-600">
+                  <button
+                    onClick={() => handleCategoryClick(r.category_id, r.category)}
+                    className="text-left font-medium hover:text-blue-600"
+                  >
                     {r.emoji} {r.category}
                   </button>
                   <div className="flex gap-6 text-sm">
@@ -124,9 +100,7 @@ export default function Dashboard({ month }) {
                     </span>
                   </div>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${over ? 'bg-red-500' : 'bg-blue-500'}`} style={{width:`${pct}%`}}/>
-                </div>
+                <ProgressBar value={r.spent} max={r.limit} color="auto" />
               </div>
             )
           })}
@@ -135,27 +109,24 @@ export default function Dashboard({ month }) {
 
       {/* Footer Stats */}
       <div className="grid grid-cols-3 gap-4 mt-8">
-        <button
+        <StatCard
+          label="Unbudgeted"
+          value={formatMoney(status.unbudgeted_spent)}
+          color="orange"
           onClick={() => navigate(`/transactions?month=${month}&unbudgeted=true`)}
-          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-orange-50 transition-colors"
-        >
-          <div className="text-sm text-gray-500">Unbudgeted</div>
-          <div className="text-xl font-bold text-orange-600">{formatMoney(status.unbudgeted_spent)}</div>
-        </button>
-        <button
+        />
+        <StatCard
+          label="Uncategorized"
+          value={formatMoney(status.uncategorized_spent)}
+          color="red"
           onClick={() => navigate(`/transactions?month=${month}&uncategorized=true`)}
-          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-red-50 transition-colors"
-        >
-          <div className="text-sm text-gray-500">Uncategorized</div>
-          <div className="text-xl font-bold text-red-600">{formatMoney(status.uncategorized_spent)}</div>
-        </button>
-        <button
+        />
+        <StatCard
+          label="Excluded"
+          value={formatMoney(status.excluded_spent)}
+          color="gray"
           onClick={() => navigate(`/transactions?month=${month}&excluded=true`)}
-          className="bg-white p-4 rounded-xl shadow-sm border text-left hover:bg-gray-100 transition-colors"
-        >
-          <div className="text-sm text-gray-500">Excluded</div>
-          <div className="text-xl font-bold text-gray-600">{formatMoney(status.excluded_spent)}</div>
-        </button>
+        />
       </div>
     </div>
   )
