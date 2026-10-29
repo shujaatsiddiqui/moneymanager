@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBudgetStatus, getCreditCardDues } from '../api'
+import { getBudgetStatus, getCreditCardDues, getAccounts } from '../api'
 import { useMonth } from '../hooks'
 import { formatMoney } from '../utils'
 import { LoadingSpinner, StatCard, MonthSelector, ProgressBar } from '../components'
@@ -9,6 +9,7 @@ export default function Dashboard() {
   const { month, setMonth, changeMonth, monthOptions } = useMonth(24)
   const [status, setStatus] = useState(null)
   const [cardDues, setCardDues] = useState([])
+  const [accountsData, setAccountsData] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -16,11 +17,13 @@ export default function Dashboard() {
     setLoading(true)
     Promise.all([
       getBudgetStatus(month),
-      getCreditCardDues()
+      getCreditCardDues(),
+      getAccounts()
     ])
-      .then(([budgetData, duesData]) => {
+      .then(([budgetData, duesData, accountsResult]) => {
         setStatus(budgetData)
         setCardDues(duesData)
+        setAccountsData(accountsResult)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -58,9 +61,33 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Credit Card Payments Due - Top Row */}
+      {/* Net Worth Summary */}
+      {accountsData && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Net Worth</h2>
+          <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border">
+            <div className="text-sm text-gray-500">Assets</div>
+            <div className="text-2xl font-bold text-green-600">{formatMoney(accountsData.assets)}</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border">
+            <div className="text-sm text-gray-500">Liabilities</div>
+            <div className="text-2xl font-bold text-red-600">{formatMoney(accountsData.liabilities)}</div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border">
+            <div className="text-sm text-gray-500">Net Worth</div>
+            <div className={`text-2xl font-bold ${accountsData.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatMoney(accountsData.total)}
+            </div>
+          </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credit Card Payments Due */}
       {cardDues.length > 0 && (
         <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Credit Card Payments</h2>
           <div className="flex items-center justify-center gap-4 overflow-x-auto pb-2">
             {cardDues.map((card) => (
               <div
@@ -102,6 +129,7 @@ export default function Dashboard() {
       />
 
       {/* Income vs Expenses Summary */}
+      <h2 className="text-lg font-semibold text-gray-700 mb-3">Monthly Summary</h2>
       <div className="grid grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Income"
@@ -128,7 +156,8 @@ export default function Dashboard() {
       </div>
 
       {/* Budget Summary Cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <h2 className="text-lg font-semibold text-gray-700 mb-3">Budget Overview</h2>
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard label="Budgeted" value={formatMoney(status.total_limit)} />
         <StatCard label="Spent" value={formatMoney(status.total_spent)} />
         <StatCard
@@ -139,6 +168,7 @@ export default function Dashboard() {
       </div>
 
       {/* Budget Categories */}
+      <h2 className="text-lg font-semibold text-gray-700 mb-3">Budget Categories</h2>
       {status.rows.length === 0 ? (
         <div className="bg-blue-50 text-blue-700 p-4 rounded-lg">No budgets yet.</div>
       ) : (
@@ -170,7 +200,8 @@ export default function Dashboard() {
       )}
 
       {/* Footer Stats */}
-      <div className="grid grid-cols-3 gap-4 mt-8">
+      <h2 className="text-lg font-semibold text-gray-700 mt-8 mb-3">Spending Alerts</h2>
+      <div className="grid grid-cols-3 gap-4">
         <StatCard
           label="Unbudgeted"
           value={formatMoney(status.unbudgeted_spent)}
