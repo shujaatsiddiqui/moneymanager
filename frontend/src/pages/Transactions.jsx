@@ -339,6 +339,44 @@ export default function Transactions({ month, categories, accounts }) {
         <div className="bg-blue-50 p-4 rounded-lg">Nothing here.</div>
       ) : (
         <>
+          {selectedTxIds.length > 0 && (
+            <div className="bg-white p-4 rounded-xl shadow-sm border mb-4 sticky top-0 z-10">
+              <div className="flex gap-4 items-center">
+                <div className="flex-shrink-0">
+                  <span className="text-sm text-gray-500">Selected: <strong>{selectedTxIds.length}</strong></span>
+                  {selectedTxIds.length <= 3 ? (
+                    <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                      {selectedTransactions.map(tx => tx.description.substring(0, 20)).join(', ')}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">
+                      Total: {formatMoney(selectedTransactions.reduce((sum, tx) => sum + tx.amount, 0))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 flex items-center gap-2">
+                  <select value={selectedCat} onChange={e => setSelectedCat(e.target.value)} className="flex-1 p-2 border rounded-lg">
+                    <option value="">Select category</option>
+                    {flatCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <label className="flex items-center gap-1 text-sm text-gray-600 whitespace-nowrap">
+                    <input type="checkbox" checked={createRule} onChange={e => setCreateRule(e.target.checked)} className="rounded" />
+                    + Rule
+                  </label>
+                </div>
+                <button onClick={handleSetCat} disabled={!selectedCat} className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
+                  Set Category
+                </button>
+                <button onClick={handleDelete} className="px-4 py-2 bg-red-100 text-red-700 rounded-lg">
+                  Delete
+                </button>
+                <button onClick={() => setSelectedTxIds([])} className="px-4 py-2 bg-gray-100 rounded-lg">
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden mb-6">
             <table className="w-full text-sm border-collapse [&_th]:border-r [&_th]:border-gray-200 [&_th:last-child]:border-r-0 [&_td]:border-r [&_td]:border-gray-200 [&_td:last-child]:border-r-0">
               <thead className="bg-gray-50">
@@ -472,47 +510,6 @@ export default function Transactions({ month, categories, accounts }) {
               </tbody>
             </table>
           </div>
-
-          {selectedTxIds.length > 0 && (
-            <div className="bg-white p-4 rounded-xl shadow-sm border">
-              <div className="mb-4 pb-3 border-b">
-                <div className="text-sm text-gray-500">Selected: <strong>{selectedTxIds.length}</strong> transaction(s)</div>
-                {selectedTxIds.length <= 3 && selectedTransactions.map(tx => (
-                  <div key={tx.id} className="text-sm text-gray-600 truncate">
-                    {tx.description} · {formatMoney(tx.amount)}
-                  </div>
-                ))}
-                {selectedTxIds.length > 3 && (
-                  <div className="text-sm text-gray-500">
-                    Total: {formatMoney(selectedTransactions.reduce((sum, tx) => sum + tx.amount, 0))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm mb-1">Category</label>
-                  <select value={selectedCat} onChange={e => setSelectedCat(e.target.value)} className="w-full p-2 border rounded-lg">
-                    <option value="">Select category</option>
-                    {flatCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                  <label className="flex items-center gap-2 mt-2 text-sm text-gray-600">
-                    <input type="checkbox" checked={createRule} onChange={e => setCreateRule(e.target.checked)} className="rounded" />
-                    Create rule for next time
-                  </label>
-                </div>
-                <button onClick={handleSetCat} disabled={!selectedCat} className="px-4 py-2 bg-blue-600 text-white rounded-lg disabled:opacity-50">
-                  Set Category
-                </button>
-                <button onClick={handleDelete} className="px-4 py-2 bg-red-100 text-red-700 rounded-lg">
-                  Delete
-                </button>
-                <button onClick={() => setSelectedTxIds([])} className="px-4 py-2 bg-gray-100 rounded-lg">
-                  Clear
-                </button>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
