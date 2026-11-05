@@ -30,6 +30,7 @@ def create_category(
             name=body.name,
             parent_id=body.parent_id,
             emoji=body.emoji,
+            kind=body.kind,
             exclude_from_budget=body.exclude_from_budget,
         )
         return IdResponse(id=category_id)

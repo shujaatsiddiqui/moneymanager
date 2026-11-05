@@ -45,6 +45,7 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(80))
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("categories.id"), nullable=True)
     emoji: Mapped[str] = mapped_column(String(8), default="")
+    kind: Mapped[str] = mapped_column(String(10), default="expense")  # expense or income
     exclude_from_budget: Mapped[bool] = mapped_column(Boolean, default=False)
     sort: Mapped[int] = mapped_column(Integer, default=0)
     # Same subcategory name is allowed under different parents (e.g. "Car").

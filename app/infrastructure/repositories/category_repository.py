@@ -90,9 +90,10 @@ class CategoryRepository(BaseRepository[Category]):
                 "id": c.id,
                 "name": c.name,
                 "emoji": c.emoji,
+                "kind": c.kind,
                 "exclude_from_budget": c.exclude_from_budget,
                 "children": [
-                    {"id": k.id, "name": k.name, "parent_id": c.id}
+                    {"id": k.id, "name": k.name, "parent_id": c.id, "kind": k.kind}
                     for k in children_map.get(c.id, [])
                 ],
             }

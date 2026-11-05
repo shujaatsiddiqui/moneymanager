@@ -4,12 +4,13 @@ import { api } from '../api'
 export default function Categories() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('expense') // expense or income
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [newCategory, setNewCategory] = useState({ name: '', emoji: '', parent_id: null, exclude_from_budget: false })
   const [showNewForm, setShowNewForm] = useState(false)
   const [error, setError] = useState('')
-  const [deleteModal, setDeleteModal] = useState(null) // { id, name, txnData, cascade, targetId }
+  const [deleteModal, setDeleteModal] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const loadCategories = async () => {
@@ -26,6 +27,10 @@ export default function Categories() {
 
   useEffect(() => { loadCategories() }, [])
 
+  // Filter categories by active tab
+  const filteredCategories = categories.filter(c => c.kind === activeTab)
+  const tabParents = filteredCategories
+
   const handleCreate = async (e) => {
     e.preventDefault()
     setError('')
@@ -34,6 +39,7 @@ export default function Categories() {
         name: newCategory.name,
         emoji: newCategory.emoji || null,
         parent_id: newCategory.parent_id || null,
+        kind: activeTab, // Use current tab as kind
         exclude_from_budget: newCategory.exclude_from_budget,
       })
       setNewCategory({ name: '', emoji: '', parent_id: null, exclude_from_budget: false })
@@ -56,7 +62,6 @@ export default function Categories() {
     }
   }
 
-  // Check for transactions before deleting
   const initiateDelete = async (id, name, cascade = false) => {
     setError('')
     setDeleteLoading(true)
@@ -65,10 +70,8 @@ export default function Categories() {
       const totalTxns = txnData.total_count || 0
 
       if (totalTxns > 0) {
-        // Has transactions - show modal to move them first
         setDeleteModal({ id, name, txnData, cascade, targetId: '' })
       } else {
-        // No transactions - confirm and delete directly
         if (confirm(`Delete category "${name}"${cascade ? ' and all subcategories' : ''}?`)) {
           if (cascade) {
             await api.deleteCategoryCascade(id)
@@ -97,9 +100,7 @@ export default function Categories() {
     setDeleteLoading(true)
     setError('')
     try {
-      // Move transactions first
       await api.moveCategoryTransactions(id, parseInt(targetId))
-      // Then delete the category
       if (cascade) {
         await api.deleteCategoryCascade(id)
       } else {
@@ -114,7 +115,6 @@ export default function Categories() {
     }
   }
 
-  // Build flat list of all categories for the target dropdown
   const getAllCategoryOptions = () => {
     const options = []
     categories.forEach(parent => {
@@ -130,7 +130,7 @@ export default function Categories() {
     return options
   }
 
-  const startEdit = (cat, isChild = false) => {
+  const startEdit = (cat) => {
     setEditingId(cat.id)
     setEditForm({
       name: cat.name,
@@ -150,6 +150,30 @@ export default function Categories() {
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           {showNewForm ? 'Cancel' : '+ New Category'}
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setActiveTab('expense')}
+          className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'expense'
+              ? 'bg-red-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Expense ({categories.filter(c => c.kind === 'expense').length})
+        </button>
+        <button
+          onClick={() => setActiveTab('income')}
+          className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'income'
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Income ({categories.filter(c => c.kind === 'income').length})
         </button>
       </div>
 
@@ -215,7 +239,9 @@ export default function Categories() {
       {/* New Category Form */}
       {showNewForm && (
         <form onSubmit={handleCreate} className="bg-white p-4 rounded-xl shadow-sm border mb-6">
-          <h2 className="font-medium mb-3">New Category</h2>
+          <h2 className="font-medium mb-3">
+            New {activeTab === 'expense' ? 'Expense' : 'Income'} Category
+          </h2>
           <div className="grid grid-cols-4 gap-4">
             <div>
               <label className="block text-sm mb-1">Emoji</label>
@@ -247,21 +273,23 @@ export default function Categories() {
                 className="w-full p-2 border rounded-lg"
               >
                 <option value="">None (top-level)</option>
-                {categories.map(c => (
+                {tabParents.map(c => (
                   <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>
                 ))}
               </select>
             </div>
             <div className="flex items-end gap-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={newCategory.exclude_from_budget}
-                  onChange={e => setNewCategory({ ...newCategory, exclude_from_budget: e.target.checked })}
-                  className="rounded"
-                />
-                <span className="text-sm">Exclude from budget</span>
-              </label>
+              {activeTab === 'expense' && (
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newCategory.exclude_from_budget}
+                    onChange={e => setNewCategory({ ...newCategory, exclude_from_budget: e.target.checked })}
+                    className="rounded"
+                  />
+                  <span className="text-sm">Exclude from budget</span>
+                </label>
+              )}
               <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                 Create
               </button>
@@ -272,10 +300,12 @@ export default function Categories() {
 
       {/* Categories List */}
       <div className="bg-white rounded-xl shadow-sm border">
-        {categories.length === 0 ? (
-          <div className="p-4 text-gray-500">No categories yet.</div>
+        {filteredCategories.length === 0 ? (
+          <div className="p-4 text-gray-500">
+            No {activeTab} categories yet.
+          </div>
         ) : (
-          categories.map(parent => (
+          filteredCategories.map(parent => (
             <div key={parent.id} className="border-b last:border-b-0">
               {/* Parent Category */}
               <div className="p-4 flex items-center justify-between hover:bg-gray-50">
@@ -294,15 +324,17 @@ export default function Categories() {
                       onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                       className="flex-1 p-1 border rounded"
                     />
-                    <label className="flex items-center gap-1 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={editForm.exclude_from_budget}
-                        onChange={e => setEditForm({ ...editForm, exclude_from_budget: e.target.checked })}
-                        className="rounded"
-                      />
-                      Exclude
-                    </label>
+                    {activeTab === 'expense' && (
+                      <label className="flex items-center gap-1 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={editForm.exclude_from_budget}
+                          onChange={e => setEditForm({ ...editForm, exclude_from_budget: e.target.checked })}
+                          className="rounded"
+                        />
+                        Exclude
+                      </label>
+                    )}
                     <button onClick={() => handleUpdate(parent.id)} className="px-2 py-1 bg-green-600 text-white rounded text-sm">Save</button>
                     <button onClick={() => setEditingId(null)} className="px-2 py-1 bg-gray-200 rounded text-sm">Cancel</button>
                   </div>
@@ -367,7 +399,7 @@ export default function Categories() {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => startEdit(child, true)}
+                          onClick={() => startEdit(child)}
                           className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded text-sm"
                         >
                           Edit

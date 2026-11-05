@@ -45,6 +45,7 @@ class CategoryService:
         name: str,
         parent_id: Optional[int] = None,
         emoji: str = "",
+        kind: str = "expense",
         exclude_from_budget: bool = False,
     ) -> int:
         """Create a new category."""
@@ -53,12 +54,15 @@ class CategoryService:
             parent = self.get(parent_id)
             if parent.parent_id is not None:
                 raise ValidationError("Only two levels are supported (category > subcategory)")
+            # Inherit kind from parent
+            kind = parent.kind
 
         category = Category(
             user_id=USER_ID,
             name=name,
             parent_id=parent_id,
             emoji=emoji,
+            kind=kind,
             exclude_from_budget=exclude_from_budget,
         )
 
@@ -76,6 +80,7 @@ class CategoryService:
         category_id: int,
         name: Optional[str] = None,
         emoji: Optional[str] = None,
+        kind: Optional[str] = None,
         exclude_from_budget: Optional[bool] = None,
     ) -> None:
         """Update a category."""
@@ -85,6 +90,8 @@ class CategoryService:
             category.name = name
         if emoji is not None:
             category.emoji = emoji
+        if kind is not None:
+            category.kind = kind
         if exclude_from_budget is not None:
             category.exclude_from_budget = exclude_from_budget
 

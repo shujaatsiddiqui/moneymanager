@@ -10,6 +10,7 @@ class CategoryIn(BaseModel):
     name: str
     parent_id: Optional[int] = None
     emoji: str = ""
+    kind: str = "expense"  # expense or income
     exclude_from_budget: bool = False
 
 
@@ -17,6 +18,7 @@ class CategoryPatch(BaseModel):
     """Request schema for updating a category."""
     name: Optional[str] = None
     emoji: Optional[str] = None
+    kind: Optional[str] = None
     exclude_from_budget: Optional[bool] = None
 
 
@@ -25,6 +27,7 @@ class CategoryChildOut(BaseModel):
     id: int
     name: str
     parent_id: int
+    kind: str = "expense"
 
 
 class CategoryOut(BaseModel):
@@ -32,6 +35,7 @@ class CategoryOut(BaseModel):
     id: int
     name: str
     emoji: str
+    kind: str
     exclude_from_budget: bool
     children: list[CategoryChildOut]
 
