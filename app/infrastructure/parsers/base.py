@@ -59,6 +59,9 @@ class BaseParser(ABC):
         # Generic card payment patterns
         r"DES:PAYMENT.*GSBANK",
         r"DES:PAYMENT.*CARD",
+        # Credit card payment confirmations (on the CC statement side)
+        r"PAYMENT THANK YOU",
+        r"PAYMENT\s*-\s*THANK YOU",
     ]
 
     TRANSFER_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in TRANSFER_PATTERNS]

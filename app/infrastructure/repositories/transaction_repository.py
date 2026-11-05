@@ -105,6 +105,25 @@ class TransactionRepository(BaseRepository[Transaction]):
             )
         ).first()
 
+    def find_transfer_in_by_amount(
+        self,
+        account_id: int,
+        amount_cents: int,
+        start_date: date,
+        end_date: date
+    ) -> Optional[Transaction]:
+        """Find an existing transfer_in to an account within a date range."""
+        return self.db.scalars(
+            select(Transaction).where(
+                Transaction.user_id == self.user_id,
+                Transaction.kind == "transfer_in",
+                Transaction.account_id == account_id,
+                Transaction.amount_cents == amount_cents,
+                Transaction.date >= start_date,
+                Transaction.date <= end_date
+            )
+        ).first()
+
     def count_by_category(self, category_id: int) -> int:
         """Count transactions for a category."""
         return self.db.scalar(

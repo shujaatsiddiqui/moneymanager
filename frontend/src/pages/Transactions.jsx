@@ -41,7 +41,7 @@ export default function Transactions({ month, categories, accounts }) {
   const loadTransactions = async () => {
     setLoading(true)
     const params = { uncategorized: onlyUncat || showUncategorized }
-    if (!accountId) params.month = month  // Only filter by month if not filtering by account
+    params.month = month
     if (categoryId) params.category_id = categoryId
     if (accountId) params.account_id = accountId
     if (showUnbudgeted) params.unbudgeted = true

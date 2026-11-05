@@ -1,6 +1,6 @@
 """Import service - business logic for importing transactions."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -145,6 +145,21 @@ class ImportService:
                 )
                 imported += 2
                 continue
+
+            # Check for duplicate CC payment: if this looks like a payment confirmation
+            # (e.g., "Payment Thank You") and there's already a transfer_in from another
+            # account import, skip this as a duplicate
+            if tx.kind == "transfer" and tx.is_inflow and account.is_liability:
+                amount_cents = to_cents(tx.amount)
+                # Look for existing transfer_in within ±3 days
+                start = tx.date - timedelta(days=3)
+                end = tx.date + timedelta(days=3)
+                existing_transfer = self.transaction_repo.find_transfer_in_by_amount(
+                    account_id, amount_cents, start, end
+                )
+                if existing_transfer:
+                    skipped += 1
+                    continue
 
             # Regular transaction (expense or income)
             amount_cents = to_cents(tx.amount)
