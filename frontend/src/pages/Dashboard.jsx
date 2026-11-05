@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBudgetStatus, getCreditCardDues, getAccounts } from '../api'
+import { getBudgetStatus, getCreditCardDues, getAccounts, getTransactions } from '../api'
 import { useMonth } from '../hooks'
 import { formatMoney } from '../utils'
 import { LoadingSpinner, StatCard, MonthSelector, ProgressBar } from '../components'
@@ -10,6 +10,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState(null)
   const [cardDues, setCardDues] = useState([])
   const [accountsData, setAccountsData] = useState(null)
+  const [allTransactions, setAllTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
 
@@ -18,12 +19,14 @@ export default function Dashboard() {
     Promise.all([
       getBudgetStatus(month),
       getCreditCardDues(),
-      getAccounts()
+      getAccounts(),
+      getTransactions({ account_id: 13 }) // Chase Savings
     ])
-      .then(([budgetData, duesData, accountsResult]) => {
+      .then(([budgetData, duesData, accountsResult, txData]) => {
         setStatus(budgetData)
         setCardDues(duesData)
         setAccountsData(accountsResult)
+        setAllTransactions(txData)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -59,13 +62,38 @@ export default function Dashboard() {
     return 'text-green-700'
   }
 
+  // Calculate Savings Account Breakdown
+  const chaseSavings = accountsData?.accounts?.find(a => a.id === 13)
+  const savingsBalance = chaseSavings?.balance || 0
+
+  // Count medical insurance transfers: $1,000 on 3rd of month (±1 day tolerance)
+  const medicalTransfers = allTransactions.filter(t => {
+    const day = new Date(t.date).getDate()
+    return t.kind === 'transfer_in' && Math.abs(t.amount - 1000) < 0.01 && day >= 2 && day <= 4
+  })
+
+  // Count tax payment transfers: $3,000 on 2nd of month (±1 day tolerance)
+  const taxTransfers = allTransactions.filter(t => {
+    const day = new Date(t.date).getDate()
+    return t.kind === 'transfer_in' && Math.abs(t.amount - 3000) < 0.01 && day >= 1 && day <= 3
+  })
+
+  // Previous months (Jan-Sep) = 9 months without transactions
+  const previousMonths = 9
+  const medicalMonths = medicalTransfers.length + previousMonths
+  const taxMonths = taxTransfers.length + previousMonths
+
+  const medicalTotal = medicalMonths * 1000
+  const taxTotal = taxMonths * 3000
+  const actualSavings = savingsBalance - medicalTotal - taxTotal
+
   return (
     <div>
       {/* Net Worth Summary */}
       {accountsData && (
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-3">Net Worth</h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-xl shadow-sm border">
             <div className="text-sm text-gray-500">Assets</div>
             <div className="text-2xl font-bold text-green-600">{formatMoney(accountsData.assets)}</div>
@@ -79,6 +107,13 @@ export default function Dashboard() {
             <div className={`text-2xl font-bold ${accountsData.total >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatMoney(accountsData.total)}
             </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border">
+            <div className="text-sm text-gray-500">Actual Net Worth</div>
+            <div className={`text-2xl font-bold ${(accountsData.total - medicalTotal - taxTotal) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatMoney(accountsData.total - medicalTotal - taxTotal)}
+            </div>
+            <div className="text-xs text-gray-400">After obligations</div>
           </div>
           </div>
         </div>
@@ -113,6 +148,48 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Savings Account Breakdown */}
+      {chaseSavings && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">💰 Savings Account Breakdown</h2>
+          <div className="bg-white rounded-xl shadow-sm border p-5">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-gray-600">Chase Savings Balance</span>
+              <span className="text-xl font-bold text-gray-900">{formatMoney(savingsBalance)}</span>
+            </div>
+
+            <div className="border-t pt-4 mb-4">
+              <div className="text-sm text-gray-500 mb-3">Obligations:</div>
+
+              <div className="flex justify-between items-center mb-2">
+                <div>
+                  <span className="text-gray-700">🏥 Medical Insurance</span>
+                  <span className="text-xs text-gray-400 ml-2">({medicalMonths} months × $1,000)</span>
+                </div>
+                <span className="text-red-600 font-medium">-{formatMoney(medicalTotal)}</span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-gray-700">📋 Tax Payment</span>
+                  <span className="text-xs text-gray-400 ml-2">({taxMonths} months × $3,000)</span>
+                </div>
+                <span className="text-red-600 font-medium">-{formatMoney(taxTotal)}</span>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-700 font-semibold">💵 Actual Savings</span>
+                <span className={`text-xl font-bold ${actualSavings >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatMoney(actualSavings)}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       )}
