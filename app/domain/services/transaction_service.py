@@ -102,7 +102,7 @@ class TransactionService:
                 auto = True
 
         # Transfers don't have categories
-        if kind == "transfer":
+        if kind in ("transfer", "transfer_out", "transfer_in"):
             cat_id = None
 
         tx = Transaction(
@@ -142,7 +142,7 @@ class TransactionService:
             tx.amount_cents = to_cents(amount)
 
         if kind is not None:
-            if kind == "transfer":
+            if kind in ("transfer", "transfer_out", "transfer_in"):
                 # Transfers require to_account_id
                 new_to_acc = to_account_id or tx.to_account_id
                 if not new_to_acc:
@@ -154,7 +154,7 @@ class TransactionService:
                 tx.category_id = None  # Transfers don't have categories
             else:
                 # If changing from transfer to expense/income, clear to_account_id
-                if tx.kind == "transfer":
+                if tx.kind in ("transfer", "transfer_out", "transfer_in"):
                     tx.to_account_id = None
             tx.kind = kind
 

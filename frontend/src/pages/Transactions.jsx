@@ -21,6 +21,7 @@ export default function Transactions({ month, categories, accounts }) {
     minAmount: '',
     maxAmount: '',
   })
+  const [accountStartingBalance, setAccountStartingBalance] = useState(null)
 
   const categoryId = searchParams.get('category')
   const categoryName = searchParams.get('category_name')
@@ -55,7 +56,46 @@ export default function Transactions({ month, categories, accounts }) {
     }
   }
 
+  const calculateStartingBalance = async () => {
+    if (!accountId || !month) {
+      setAccountStartingBalance(null)
+      return
+    }
+
+    try {
+      // Get the account's opening balance
+      const account = accounts.find(a => a.id === parseInt(accountId))
+      if (!account) return
+
+      // Parse the current month to get the start date
+      const [year, monthNum] = month.split('-')
+      const monthStart = new Date(year, monthNum - 1, 1)
+
+      // Fetch all transactions for this account before the current month
+      const allTxs = await api.getTransactions({ account_id: accountId })
+
+      // Filter to only transactions before the current month and calculate balance
+      let balance = account.opening || 0
+      for (const tx of allTxs) {
+        const txDate = new Date(tx.date)
+        if (txDate >= monthStart) continue // Skip transactions in or after current month
+
+        if (tx.kind === 'expense' || tx.kind === 'transfer_out' || tx.kind === 'transfer') {
+          balance -= tx.amount
+        } else if (tx.kind === 'income' || tx.kind === 'transfer_in' || tx.kind === 'refund') {
+          balance += tx.amount
+        }
+      }
+
+      setAccountStartingBalance(balance)
+    } catch (e) {
+      console.error('Error calculating starting balance:', e)
+      setAccountStartingBalance(null)
+    }
+  }
+
   useEffect(() => { loadTransactions() }, [month, categoryId, accountId, onlyUncat, showUnbudgeted, showUncategorized, showExcluded])
+  useEffect(() => { calculateStartingBalance() }, [accountId, month, accounts])
 
   const clearFilter = () => {
     const params = new URLSearchParams(searchParams)
@@ -259,7 +299,8 @@ export default function Transactions({ month, categories, accounts }) {
       return a.id - b.id
     })
 
-    let balance = currentAccount.opening || 0
+    // Use calculated starting balance for the month, or account opening balance as fallback
+    let balance = accountStartingBalance !== null ? accountStartingBalance : (currentAccount.opening || 0)
     const balanceMap = new Map()
 
     for (const tx of sortedByDate) {
@@ -492,13 +533,13 @@ export default function Transactions({ month, categories, accounts }) {
                         tx.kind === 'expense' ? 'bg-red-100 text-red-700' :
                         tx.kind === 'transfer_out' ? 'bg-orange-100 text-orange-700' :
                         tx.kind === 'transfer_in' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                      }`}>{tx.kind === 'transfer_out' ? 'transfer ↑' : tx.kind === 'transfer_in' ? 'transfer ↓' : tx.kind}</span>
+                      }`}>{tx.kind === 'transfer_out' ? 'transfer ↓' : tx.kind === 'transfer_in' ? 'transfer ↑' : tx.kind}</span>
                     </td>
                     <td className="p-3 text-right font-mono">{formatMoney(tx.amount)}</td>
                     {showBalance && (
                       <td className="p-3 text-right font-mono">
-                        <div className={tx.balance < 0 ? 'text-red-600' : ''}>{formatMoney(tx.balance)}</div>
                         <div className="text-xs text-gray-400">{formatMoney(tx.prevBalance)}</div>
+                        <div className={tx.balance < 0 ? 'text-red-600' : ''}>{formatMoney(tx.balance)}</div>
                       </td>
                     )}
                     <td className="p-3">{tx.account || <span className="text-gray-400">—</span>}</td>
