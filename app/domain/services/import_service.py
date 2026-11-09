@@ -221,12 +221,22 @@ class ImportService:
     ]
 
     def _match_account_by_pattern(self, description: str) -> Optional[Account]:
-        """Try to match an account by description pattern."""
+        """Try to match an account by checking if any account suffix appears in description."""
         import re
 
+        # Simple rule: Check if description contains ANY of the user's account/card numbers
+        # Get all accounts with suffixes
+        all_accounts = self.account_repo.list_all()
+
+        for account in all_accounts:
+            if account.account_suffix and account.account_suffix in description:
+                return account
+
+        # Fallback to account name patterns if no suffix match
         for pattern, account_name in self.ACCOUNT_PATTERNS:
             if re.search(pattern, description, re.IGNORECASE):
                 return self.account_repo.get_by_name(account_name)
+
         return None
 
     def _create_transfer_pair(

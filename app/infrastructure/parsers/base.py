@@ -33,6 +33,11 @@ class BaseParser(ABC):
         r"AUTOPAY PAYMENT.*THANK",
         r"Online Banking payment to CRD",
         r"PAYMENT TO CRD",
+        # Payment variations to card/account
+        r"(?:PAYMENT|PMNT|PYMT)\s+TO\s+(?:CARD|CRD|CC|ACCT)",
+        r"(?:PAYMENT|PMNT|PYMT)\s+TO\s+\w+\s+(?:CARD|CC)",  # "Payment to Chase card"
+        r"(?:PAYMENT|PMNT|PYMT).*(?:ENDING IN|LAST)\s+\d{4}",  # Any payment mentioning card digits
+        r"(?:PAYMENT|PMNT|PYMT).*\b\d{4}\b",  # Payment with any 4-digit number (card suffix)
         # Online transfers between accounts
         r"Online Transfer from\s+CHK",
         r"Online Transfer to\s+CHK",
@@ -47,6 +52,7 @@ class BaseParser(ABC):
         r"TRANSFER FROM.*SAVINGS",
         r"TRANSFER TO.*CHECKING",
         r"TRANSFER FROM.*CHECKING",
+        r"(?:TRANSFER|TRNSFR|XFER).*\b\d{4}\b",  # Transfer with 4-digit account/card number
         # Credit card payments (Chase)
         r"ORIG CO NAME:CHASE CREDIT",
         r"CHASE CREDIT CRD",
