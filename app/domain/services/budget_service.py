@@ -35,6 +35,9 @@ class BudgetService:
         # Get totals
         total_income_cents = self.transaction_repo.get_total_by_kind("income", start, end)
         total_expenses_cents = self.transaction_repo.get_total_by_kind("expense", start, end)
+        total_refunds_cents = self.transaction_repo.get_total_by_kind("refund", start, end)
+        # Net expenses = gross expenses - refunds
+        total_expenses_cents = total_expenses_cents - total_refunds_cents
 
         # Get spending by category
         spent_by_cat = self.transaction_repo.get_spending_by_category(start, end)

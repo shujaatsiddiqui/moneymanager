@@ -162,6 +162,10 @@ class ImportService:
                     continue
 
             # Regular transaction (expense or income)
+            # For credit cards (liabilities), positive amounts that aren't transfers are likely refunds
+            if account.is_liability and tx.kind == "income" and tx.is_inflow:
+                tx.kind = "refund"
+
             amount_cents = to_cents(tx.amount)
             category_id = None
 
@@ -170,8 +174,8 @@ class ImportService:
             if rule:
                 category_id = rule.category_id
                 rule_categorized += 1
-            elif use_ai and tx.kind == "expense" and categories:
-                # Try AI categorization for expenses
+            elif use_ai and tx.kind in ("expense", "refund") and categories:
+                # Try AI categorization for expenses and refunds
                 ai_cat_id = self.ai.categorize_single(tx.description, categories)
                 if ai_cat_id:
                     category_id = ai_cat_id
@@ -226,7 +230,7 @@ class ImportService:
 
         # Simple rule: Check if description contains ANY of the user's account/card numbers
         # Get all accounts with suffixes
-        all_accounts = self.account_repo.list_all()
+        all_accounts = self.account_repo.get_all()
 
         for account in all_accounts:
             if account.account_suffix and account.account_suffix in description:

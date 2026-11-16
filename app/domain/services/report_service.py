@@ -73,7 +73,7 @@ class ReportService:
                 parent_id = get_parent_id(cat_id) or cat_id
                 income_by_category[parent_id] = income_by_category.get(parent_id, 0) + amount
 
-        # Build category breakdown for expenses (excluding refunds)
+        # Build category breakdown for expenses
         expenses_by_category: dict[int, int] = {}
         non_operating_by_category: dict[int, int] = {}
 
@@ -90,28 +90,42 @@ class ReportService:
                             expenses_by_category.get(parent_id, 0) + amount
                         )
 
-        # Refunds reduce expenses (or can be shown separately)
+        # Refunds reduce expenses - subtract them from same category
         refunds_by_category: dict[int, int] = {}
         for (kind, cat_id), amount in totals.items():
             if kind == "refund" and cat_id is not None:
                 parent_id = get_parent_id(cat_id) or cat_id
                 refunds_by_category[parent_id] = refunds_by_category.get(parent_id, 0) + amount
+                # Subtract refunds from expenses in the same category
+                if not is_excluded(cat_id):
+                    expenses_by_category[parent_id] = expenses_by_category.get(parent_id, 0) - amount
+                else:
+                    non_operating_by_category[parent_id] = non_operating_by_category.get(parent_id, 0) - amount
 
-        # Calculate totals
+        # Calculate totals (expenses are now net after subtracting refunds above)
         total_income = sum(
             amount for (kind, _), amount in totals.items() if kind == "income"
         )
-        total_expenses = sum(
+        gross_expenses = sum(
             amount for (kind, cat_id), amount in totals.items()
             if kind == "expense" and not is_excluded(cat_id)
         )
         total_refunds = sum(
-            amount for (kind, _), amount in totals.items() if kind == "refund"
+            amount for (kind, cat_id), amount in totals.items()
+            if kind == "refund" and not is_excluded(cat_id)
         )
-        total_non_operating = sum(
+        # Net expenses = gross expenses - refunds
+        total_expenses = gross_expenses - total_refunds
+
+        gross_non_operating = sum(
             amount for (kind, cat_id), amount in totals.items()
             if kind == "expense" and is_excluded(cat_id)
         )
+        non_operating_refunds = sum(
+            amount for (kind, cat_id), amount in totals.items()
+            if kind == "refund" and is_excluded(cat_id)
+        )
+        total_non_operating = gross_non_operating - non_operating_refunds
 
         # Uncategorized amounts
         uncategorized_income = totals.get(("income", None), 0)
@@ -136,11 +150,11 @@ class ReportService:
 
         # Net calculations
         # Gross profit = Income - Cost of Revenue (we don't track COGS separately, so it's just income)
-        # Operating income = Gross profit - Operating expenses
-        # Net income = Operating income - Non-operating expenses + Refunds
+        # Operating income = Gross profit - Net Operating expenses (expenses already have refunds subtracted)
+        # Net income = Operating income - Net Non-operating expenses
         gross_profit = total_income
-        operating_income = gross_profit - total_expenses + total_refunds
-        net_income = operating_income - total_non_operating
+        operating_income = gross_profit - total_expenses  # total_expenses is already net
+        net_income = operating_income - total_non_operating  # total_non_operating is already net
 
         return {
             "period": {

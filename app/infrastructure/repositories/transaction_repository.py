@@ -143,8 +143,12 @@ class TransactionRepository(BaseRepository[Transaction]):
         start_date: date,
         end_date: date
     ) -> dict[Optional[int], int]:
-        """Get total spending (in cents) grouped by category for a date range."""
-        rows = self.db.execute(
+        """Get net spending (in cents) grouped by category for a date range.
+
+        Net spending = expenses - refunds per category
+        """
+        # Get expenses by category
+        expense_rows = self.db.execute(
             select(Transaction.category_id, func.sum(Transaction.amount_cents))
             .where(
                 Transaction.user_id == self.user_id,
@@ -154,7 +158,30 @@ class TransactionRepository(BaseRepository[Transaction]):
             )
             .group_by(Transaction.category_id)
         ).all()
-        return dict(rows)
+        expenses = dict(expense_rows)
+
+        # Get refunds by category
+        refund_rows = self.db.execute(
+            select(Transaction.category_id, func.sum(Transaction.amount_cents))
+            .where(
+                Transaction.user_id == self.user_id,
+                Transaction.kind == "refund",
+                Transaction.date >= start_date,
+                Transaction.date < end_date
+            )
+            .group_by(Transaction.category_id)
+        ).all()
+        refunds = dict(refund_rows)
+
+        # Calculate net spending per category (expenses - refunds)
+        all_categories = set(expenses.keys()) | set(refunds.keys())
+        net_spending = {}
+        for cat_id in all_categories:
+            expense_amt = expenses.get(cat_id, 0)
+            refund_amt = refunds.get(cat_id, 0)
+            net_spending[cat_id] = expense_amt - refund_amt
+
+        return net_spending
 
     def get_total_by_kind(self, kind: str, start_date: date, end_date: date) -> int:
         """Get total amount (in cents) for a kind in a date range."""

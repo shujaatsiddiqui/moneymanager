@@ -281,8 +281,11 @@ export default function Transactions({ month, categories, accounts }) {
   )
 
   // Calculate totals from filtered transactions
-  const totalExpense = sortedTransactions.filter(t => t.kind === 'expense').reduce((a, t) => a + t.amount, 0)
+  const grossExpense = sortedTransactions.filter(t => t.kind === 'expense').reduce((a, t) => a + t.amount, 0)
+  const totalRefund = sortedTransactions.filter(t => t.kind === 'refund').reduce((a, t) => a + t.amount, 0)
+  const totalExpense = grossExpense - totalRefund  // Net expenses = expenses - refunds
   const totalIncome = sortedTransactions.filter(t => t.kind === 'income').reduce((a, t) => a + t.amount, 0)
+  const netTotal = totalIncome - totalExpense
 
   // Calculate running balance when viewing account transactions
   const showBalance = !!accountId
@@ -290,7 +293,10 @@ export default function Transactions({ month, categories, accounts }) {
 
   // Calculate running balances (sorted by date ascending for calculation)
   const transactionsWithBalance = (() => {
-    if (!showBalance || !currentAccount) return sortedTransactions.map(tx => ({ ...tx, balance: null, prevBalance: null }))
+    // Don't calculate balance if: no account filter, accounts not loaded, or account not found
+    if (!showBalance || !accounts.length || !currentAccount) {
+      return sortedTransactions.map(tx => ({ ...tx, balance: null, prevBalance: null }))
+    }
 
     // Sort by date ascending, then by id ascending for same-day transactions
     const sortedByDate = [...sortedTransactions].sort((a, b) => {
@@ -372,6 +378,7 @@ export default function Transactions({ month, categories, accounts }) {
         <div className="flex gap-4 text-sm">
           <span>Expenses: <strong className="text-red-600">{formatMoney(totalExpense)}</strong></span>
           <span>Income: <strong className="text-green-600">{formatMoney(totalIncome)}</strong></span>
+          <span>Net: <strong className={netTotal >= 0 ? 'text-green-600' : 'text-red-600'}>{formatMoney(netTotal)}</strong></span>
           <span>Count: <strong>{sortedTransactions.length}</strong>{sortedTransactions.length !== transactions.length && ` / ${transactions.length}`}</span>
         </div>
       </div>

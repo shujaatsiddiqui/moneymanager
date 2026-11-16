@@ -72,6 +72,21 @@ class BaseParser(ABC):
 
     TRANSFER_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in TRANSFER_PATTERNS]
 
+    # Patterns for detecting refunds/returns
+    REFUND_PATTERNS = [
+        r"\bRETURN\b",
+        r"\bREFUND\b",
+        r"\bREVERSAL\b",
+        r"\bCREDIT\b.*\bADJUSTMENT\b",
+        r"\bCREDIT\b.*\bMEMO\b",
+        r"\bRETURN\s+CREDIT\b",
+        r"\bPURCHASE\s+RETURN\b",
+        r"\bMERCHANDISE\s+RETURN\b",
+        r"\bCREDIT\s+FOR\s+RETURN\b",
+    ]
+
+    REFUND_PATTERNS_COMPILED = [re.compile(p, re.IGNORECASE) for p in REFUND_PATTERNS]
+
     def __init__(self):
         self.hash_counts: dict[str, int] = {}
 
@@ -88,6 +103,13 @@ class BaseParser(ABC):
     def is_likely_transfer(self, description: str) -> bool:
         """Check if a transaction description looks like an inter-account transfer."""
         for pattern in self.TRANSFER_PATTERNS_COMPILED:
+            if pattern.search(description):
+                return True
+        return False
+
+    def is_likely_refund(self, description: str) -> bool:
+        """Check if a transaction description looks like a refund/return."""
+        for pattern in self.REFUND_PATTERNS_COMPILED:
             if pattern.search(description):
                 return True
         return False
@@ -112,6 +134,8 @@ class BaseParser(ABC):
         is_inflow = amount > 0
         if self.is_likely_transfer(description):
             kind = "transfer"
+        elif is_inflow and self.is_likely_refund(description):
+            kind = "refund"
         else:
             kind = "income" if is_inflow else "expense"
         return kind, is_inflow
